@@ -37,6 +37,7 @@ class ProfileUpsertRequest(BaseModel):
     exam_date: Optional[str] = Field(None, max_length=10)
     target_region: Optional[str] = Field(None, max_length=50)
     target_post: Optional[str] = Field(None, max_length=100)
+    self_intro: Optional[str] = Field(None, max_length=1000)
     profile_status: int = 0
 
 
@@ -275,6 +276,7 @@ def _to_dict(p: Optional[UserProfile]) -> dict:
         "exam_date": p.exam_date,
         "target_region": p.target_region,
         "target_post": p.target_post,
+        "self_intro": p.self_intro,
         "profile_status": p.profile_status,
         "update_time": p.update_time.isoformat() if p.update_time else None,
     }
@@ -309,6 +311,7 @@ async def upsert_profile(
     row.exam_date = req.exam_date
     row.target_region = req.target_region
     row.target_post = req.target_post
+    row.self_intro = req.self_intro
     if req.profile_status == 1:
         row.profile_status = 1
     db.commit()

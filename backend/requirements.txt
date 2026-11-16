@@ -27,6 +27,8 @@ redis>=5.0.0
 pandas>=2.2.0
 numpy>=1.26.0,<3.0
 openpyxl>=3.1.0
+# knowledge_ops.py / 知识库配置解析；最新 main 启动必需
+PyYAML>=6.0
 
 # ==================== HTTP / 网络 ====================
 requests>=2.31.0
@@ -79,3 +81,5 @@ pdfplumber
 PyPDF2>=3.0.0  # pdf_reader 扫描件回退与图片提取显式 import PyPDF2；缺包会让无文本层 PDF 在 OCR 前误报 500
 bleach
 Pillow
+jieba==0.42.1  # P3b 论坛数据看板：帖子关键词分词（中文分词，无外网依赖）
+PyYAML>=6.0

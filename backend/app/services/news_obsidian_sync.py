@@ -39,7 +39,7 @@ def _action(body: str) -> tuple[str | None, str | None]:
 
 def sync_news_review(db: Session, vault: Path, dry_run: bool = False) -> dict[str, Any]:
     vault = Path(vault).expanduser()
-    root = vault / "00-收件箱" / "新闻"
+    root = vault / "01-待审核"
     report = {"ok": True, "processed": 0, "skipped": 0, "moved": 0, "errors": []}
     if not root.is_dir():
         return report
@@ -71,7 +71,12 @@ def sync_news_review(db: Session, vault: Path, dry_run: bool = False) -> dict[st
         except Exception as exc:
             report["errors"].append(f"{path.name}: {exc}")
             continue
-        target = _safe_path(vault, "07-归档", "新闻审核")
+        target_dir = (
+            "02-已发布" if action == "publish"
+            else "03-已拒绝" if action == "reject"
+            else "01-待审核"
+        )
+        target = _safe_path(vault, target_dir, "新闻审核")
         target.mkdir(parents=True, exist_ok=True)
         path.replace(target / f"{news_id}-{datetime.now():%Y%m%d_%H%M%S_%f}.md")
         report["processed"] += 1

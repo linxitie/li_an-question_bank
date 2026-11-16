@@ -9,6 +9,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from io import BytesIO
 from typing import Callable
 from urllib.parse import urljoin, urlparse
 
@@ -29,6 +30,7 @@ _CONTENT_SELECTORS = (
     "article",
     ".article-content",
     ".article",
+    ".content_main",
     ".content",
     ".TRS_Editor",
     ".p2j_con3",
@@ -38,12 +40,67 @@ _CONTENT_SELECTORS = (
     ".detail",
 )
 _DATE_RE = re.compile(r"(20\d{2})[-年/.](\d{1,2})[-月/.](\d{1,2})")
-_NOISE_IMAGE_PARTS = ("/template/", "logo", "icon", "banner", "qrcode", "share")
+_NOISE_IMAGE_PARTS = (
+    "/template/",
+    "logo",
+    "icon",
+    "banner",
+    "qrcode",
+    "qr-code",
+    "二维码",
+    "avatar",
+    "share",
+    "广告",
+)
+_AD_IMAGE_RE = re.compile(r"(?:^|[/_.-])ad(?:[/_.-]|$)", re.I)
+_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp")
 
 
-def _is_noise_image(src: str) -> bool:
-    value = src.lower()
-    return any(part in value for part in _NOISE_IMAGE_PARTS)
+def _image_text(img) -> str:
+    return " ".join(
+        str(value or "")
+        for value in (
+            img.get("alt"),
+            img.get("title"),
+            " ".join(img.get("class") or []),
+        )
+    ).lower()
+
+
+def _is_noise_image(src: str, img=None) -> bool:
+    value = f"{src} {_image_text(img) if img is not None else ''}".lower()
+    if any(part in value for part in _NOISE_IMAGE_PARTS):
+        return True
+    return bool(_AD_IMAGE_RE.search(value))
+
+
+def _is_acceptable_image(data: bytes, *, min_size: int = 100, min_area: int = 90000) -> bool:
+    """用真实像素尺寸排除 icon、头像、二维码等小图；无法解码的图片不下载。"""
+    try:
+        from PIL import Image
+
+        with Image.open(BytesIO(data)) as image:
+            width, height = image.size
+    except Exception:
+        return False
+    if width < min_size or height < min_size:
+        return False
+    long_side, short_side = max(width, height), min(width, height)
+    if short_side / long_side >= 0.85 and width * height <= min_area:
+        return False
+    # 可选：直接识别二维码，避免“尺寸够大但实际是下载二维码”的图片。
+    try:
+        import cv2
+        import numpy as np
+
+        matrix = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if matrix is not None:
+            decoded, points, _ = cv2.QRCodeDetector().detectAndDecode(matrix)
+            if decoded or points is not None:
+                return False
+    except Exception:
+        pass
+    return True
 
 
 @dataclass
@@ -142,6 +199,170 @@ def parse_list_links(
     return links
 
 
+def _clean_title(value: str) -> str:
+    value = (value or "").strip()
+    value = re.sub(r"^(?:中国法学会|地方动态|要闻|新闻)\s*[-|｜:：]\s*", "", value)
+    value = re.sub(r"\s+20\d{2}[-/年]\d{1,2}[-/月]\d{1,2}.*$", "", value)
+    value = re.sub(r"\s+(?:来源|分享)[:：].*$", "", value)
+    value = re.sub(r"\s*-\s*标准\s*\+\s*$", "", value)
+    return value.strip()
+
+
+_UNWANTED_CONTENT_SELECTORS = (
+    "footer",
+    "aside",
+    "nav",
+    ".related",
+    ".related-news",
+    ".recommend",
+    ".recommend-list",
+    ".share",
+    ".copyright",
+    ".footer",
+    ".sidebar",
+    ".list_box_right",
+    ".list_img",
+    ".list_list",
+    ".list_tit2",
+    ".list_rows",
+    ".article_photo_title",
+    ".photo",
+    ".address",
+    ".ad",
+    ".advertisement",
+)
+_JUNK_MARKERS = (
+    "相关阅读",
+    "相关链接",
+    "推荐阅读",
+    "延伸阅读",
+    "猜你喜欢",
+    "热门推荐",
+    "更多推荐",
+    "版权所有",
+    "Copyright",
+    "ICP备",
+    "主办单位",
+    "承办单位",
+    "网站标识码",
+    "举报电话",
+    "举报邮箱",
+    "服务邮箱",
+    "(责编",
+    "责编：",
+    "微信“扫一扫”",
+    "扫一扫添加",
+    "《 人民日报 》",
+    "责任编辑",
+    "编辑：",
+    "审核：",
+    "签发：",
+    "--相关机构--",
+    "--新闻媒体--",
+)
+_LINE_NOISE_PREFIXES = (
+    "来源：",
+    "发布时间：",
+    "时间：",
+    "字号：",
+    "打印本页",
+    "分享",
+    "[ English ]",
+    "中国共产党新闻网",
+)
+
+
+def _is_link_only(paragraph: str) -> bool:
+    value = paragraph.strip()
+    if not value:
+        return True
+    if re.fullmatch(r"\[\[IMG:\d+\]\]", value):
+        return False
+    if value.count("http://") + value.count("https://") >= 2:
+        return True
+    if re.fullmatch(r"(?:https?://|www\.)\S+", value):
+        return True
+    if re.fullmatch(r"[\d\s.,，。、:：\-—（）()【】]+", value):
+        return True
+    return len(value) < 10 and not re.search(r"[。！？；：]", value)
+
+
+def clean_article_text(title: str, text: str) -> str:
+    """把正文规范为 Markdown 段落，去标题重复、尾部版权/推荐和纯链接。"""
+    raw = re.split(r"\r?\n+", text or "")
+    title_key = re.sub(r"\s+", "", title or "")
+    paragraphs: list[str] = []
+    for item in raw:
+        paragraph = re.sub(r"[ \t\u3000]+", " ", item).strip()
+        if not paragraph:
+            continue
+        repeated = re.match(r"^(.{2,30}?)\1", paragraph)
+        if repeated:
+            paragraph = repeated.group(1) + paragraph[repeated.end() :]
+        compact = re.sub(r"\s+", "", paragraph)
+        if title_key and compact.startswith(title_key):
+            rest = paragraph[paragraph.find(title) + len(title) :]
+            rest = re.sub(
+                r"^.*?时间[:：]\s*\d{4}[-/]\d{1,2}[-/]\d{1,2}" r"(?:\s+\d{1,2}:\d{2})?\s*",
+                "",
+                rest,
+            ).lstrip(" -—_|｜")
+            if not rest:
+                continue
+            paragraph = rest
+            compact = re.sub(r"\s+", "", paragraph)
+        if compact == title_key:
+            continue
+        if any(paragraph.startswith(prefix) for prefix in _LINE_NOISE_PREFIXES):
+            continue
+        # 相关新闻列表里的截断标题通常以 .. / ... 结尾，出现在正文之后。
+        if paragraphs and re.search(r"(?:\.{2,}|…{1,})$", paragraph):
+            break
+        if any(marker in paragraph for marker in _JUNK_MARKERS):
+            if paragraphs:
+                break
+            continue
+        if _is_link_only(paragraph):
+            continue
+        paragraphs.append(paragraph)
+        if len(paragraphs) >= 80:
+            break
+    while (
+        paragraphs
+        and len(paragraphs[0]) < 20
+        and not re.search(r"[。！？；：.!?;:]", paragraphs[0])
+    ):
+        paragraphs.pop(0)
+    merged: list[str] = []
+    for paragraph in paragraphs:
+        if (
+            merged
+            and len(merged[-1]) < 80
+            and not re.search(r"[。！？；：.!?;:”\"』】）)]$", merged[-1])
+        ):
+            merged[-1] = f"{merged[-1]}{paragraph}"
+        else:
+            merged.append(paragraph)
+    return "\n\n".join(merged)
+
+
+def _content_paragraphs(node) -> list[str]:
+    for unwanted in node.select(", ".join(_UNWANTED_CONTENT_SELECTORS)):
+        unwanted.decompose()
+    paragraph_nodes = node.find_all("p")
+    if paragraph_nodes:
+        return [
+            re.sub(r"[ \t\u3000]+", " ", item.get_text(" ", strip=True)).strip()
+            for item in paragraph_nodes
+            if item.get_text(" ", strip=True).strip()
+        ]
+    return [
+        re.sub(r"[ \t\u3000]+", " ", line).strip()
+        for line in node.get_text("\n", strip=True).splitlines()
+        if line.strip()
+    ]
+
+
 def parse_article(html: str, url: str) -> ArticleData:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
@@ -158,6 +379,7 @@ def parse_article(html: str, url: str) -> ArticleData:
     ):
         for node in soup.select(selector):
             candidate = (node.get("content") or node.get_text(" ", strip=True) or "").strip()
+            candidate = _clean_title(candidate)
             if len(candidate) < 6 or candidate in {"工作链接", "专题专栏", "地方特色"}:
                 continue
             if len(candidate) > len(title):
@@ -165,9 +387,10 @@ def parse_article(html: str, url: str) -> ArticleData:
     if not title:
         node = soup.select_one("title")
         if node:
-            title = node.get_text(" ", strip=True).strip()
+            title = _clean_title(node.get_text(" ", strip=True))
     body = ""
     best_score = 0
+    content_node = None
     for selector in _CONTENT_SELECTORS:
         for node in soup.select(selector):
             text = "\n".join(
@@ -178,12 +401,20 @@ def parse_article(html: str, url: str) -> ArticleData:
             if len(text) > best_score:
                 body = text
                 best_score = len(text)
+                content_node = node
+    preferred_content = soup.select_one(".content_main")
+    if preferred_content is not None and len(preferred_content.get_text(" ", strip=True)) >= 100:
+        content_node = preferred_content
     if not body:
         body = "\n".join(
             line.strip()
             for line in soup.get_text("\n", strip=True).splitlines()
             if len(line.strip()) >= 8
         )
+    if content_node is not None:
+        body = clean_article_text(title, "\n".join(_content_paragraphs(content_node)))
+    else:
+        body = clean_article_text(title, body)
     date_match = _DATE_RE.search(soup.get_text(" ", strip=True))
     published_at = None
     if date_match:
@@ -192,17 +423,35 @@ def parse_article(html: str, url: str) -> ArticleData:
         except ValueError:
             published_at = None
     images = []
-    for img in soup.find_all("img"):
-        src = (img.get("src") or img.get("data-src") or "").strip()
+    image_nodes = []
+    seen_images = set()
+    # 只在最佳正文容器内取图；没有识别到正文时不回退到全页 <img>。
+    for img in (content_node.find_all("img") if content_node is not None else []):
+        src = (
+            img.get("src")
+            or img.get("data-src")
+            or img.get("data-original")
+            or img.get("data-url")
+            or ""
+        ).strip()
         if not src or src.startswith("data:"):
             continue
         src = urljoin(url, src)
-        if _is_noise_image(src):
+        if _is_noise_image(src, img):
             continue
-        if src.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
-            images.append(src)
+        if not src.lower().split("?")[0].endswith(_IMAGE_EXTS):
+            continue
+        if src in seen_images:
+            continue
+        seen_images.add(src)
+        images.append(src)
+        image_nodes.append((img, len(images) - 1))
         if len(images) >= 5:
             break
+    if content_node is not None and image_nodes:
+        for img, order in image_nodes:
+            img.replace_with(f" [[IMG:{order}]] ")
+        body = clean_article_text(title, "\n".join(_content_paragraphs(content_node)))
     return ArticleData(
         url=url, title=title, content=body.strip(), published_at=published_at, images=images
     )
@@ -229,6 +478,9 @@ def _download_image(url: str, storage: NewsStorage, timeout: int = 15) -> str | 
         resp = requests.get(url, headers={"User-Agent": UA}, timeout=timeout)
         resp.raise_for_status()
         if len(resp.content) > 8 * 1024 * 1024:
+            return None
+        if not _is_acceptable_image(resp.content):
+            logger.info("news image ignored by size/filter: %s", url[:100])
             return None
         return storage.save_image(resp.content, _suffix(url), source_url=url)
     except Exception as exc:
@@ -281,6 +533,9 @@ def _download_image_playwright(
             data = resp.body()
             if not data or len(data) > 8 * 1024 * 1024:
                 return None
+            if not _is_acceptable_image(data):
+                logger.info("news playwright image ignored by size/filter: %s", image_url[:100])
+                return None
             return storage.save_image(data, _suffix(image_url), source_url=image_url)
         except Exception as exc:
             logger.warning("news playwright image failed %s: %s", image_url[:100], exc)
@@ -317,6 +572,8 @@ def collect_source(
     source: NewsSourceConfig,
     *,
     limit: int = 5,
+    scan_limit: int | None = None,
+    daily_limit: int | None = 5,
     dry_run: bool = False,
     fetcher: Callable[[str], str] | None = None,
     storage: NewsStorage | None = None,
@@ -343,6 +600,24 @@ def collect_source(
         "errors": [],
         "samples": [],
     }
+    if daily_limit is not None:
+        day_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        used_today = (
+            db.query(NewsArticle)
+            .filter(
+                NewsArticle.source == source.code,
+                NewsArticle.create_time >= day_start,
+            )
+            .count()
+        )
+        remaining_today = max(0, daily_limit - used_today)
+        report["daily_used"] = used_today
+        report["daily_remaining"] = remaining_today
+        if remaining_today == 0:
+            report["ok"] = True
+            report["daily_skipped"] = True
+            return report
+        limit = min(limit, remaining_today)
     try:
         list_html = fetch(source.list_url)
         host = urlparse(source.base_url).netloc.lower()
@@ -350,7 +625,7 @@ def collect_source(
         links = parse_list_links(
             list_html,
             source.list_url,
-            limit=limit,
+            limit=max(limit, scan_limit or limit * 3),
             allowed_hosts=allowed_hosts,
             link_contains=source.link_contains,
         )
@@ -384,6 +659,8 @@ def collect_source(
             )
             if dry_run:
                 report["inserted"] += 1
+                if report["inserted"] >= limit:
+                    break
                 continue
             news = NewsArticle(
                 title=article.title[:500],
@@ -413,6 +690,8 @@ def collect_source(
                     db.add(NewsImage(news_id=news.news_id, image_path=rel, image_order=order))
                     report["images"] += 1
             report["inserted"] += 1
+            if report["inserted"] >= limit:
+                break
         if not dry_run:
             db.commit()
         report["ok"] = True
@@ -422,7 +701,14 @@ def collect_source(
     return report
 
 
-def collect_all_sources(db: Session, *, limit: int = 5, dry_run: bool = False) -> list[dict]:
+def collect_all_sources(
+    db: Session,
+    *,
+    limit: int = 5,
+    scan_limit: int | None = None,
+    daily_limit: int | None = 5,
+    dry_run: bool = False,
+) -> list[dict]:
     enabled = {
         row.source_code: bool(row.enabled)
         for row in db.query(NewsSource.source_code, NewsSource.enabled).all()
@@ -431,7 +717,16 @@ def collect_all_sources(db: Session, *, limit: int = 5, dry_run: bool = False) -
     for source in NEWS_SOURCES:
         if not enabled.get(source.code, bool(source.enabled)):
             continue
-        reports.append(collect_source(db, source, limit=limit, dry_run=dry_run))
+        reports.append(
+            collect_source(
+                db,
+                source,
+                limit=limit,
+                scan_limit=scan_limit,
+                daily_limit=daily_limit,
+                dry_run=dry_run,
+            )
+        )
     return reports
 
 

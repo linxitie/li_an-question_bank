@@ -5,8 +5,10 @@
       <div class="quote-source">
         <XIcon :icon="ReadingLamp" :size="18" color="#c41e3a"></XIcon>
         <span>每日金句</span>
+        <QuoteCategoryTag :category="state.category" />
       </div>
       <span class="quote-date"> {{ state.currentDate }}</span>
+      <QuoteLibraryLink />
     </div>
     <div class="quote-body">
       <div class="quote-mark left-mark">“</div>
@@ -33,24 +35,8 @@
       </div>
     </div>
     <!-- 每日新闻 -->
-    <div class="news-section">
-      <div class="news-header">
-        <XIcon :icon="Document" :size="16" color="#c41e3a"></XIcon>
-        <span class="news-title">每日新闻</span>
-        <span class="news-badge" v-if="state.newsItems.length">共 {{ state.newsItems.length }} 条</span>
-      </div>
-      <div class="news-list" v-if="state.newsItems.length">
-        <div v-for="(n, idx) in state.newsItems" :key="idx"
-             class="news-item" @click="openNewsDetail(n)">
-          <span class="news-dot"></span>
-          <span class="news-text" :title="n.title">{{ n.title.length > 20 ? n.title.substring(0, 20) + '...' : n.title }}</span>
-          <span class="news-source">{{ n.source === 'cpd' ? '公安报' : '人民网' }}</span>
-        </div>
-      </div>
-      <div class="news-empty" v-else>
-        <span>新闻加载中...</span>
-      </div>
-    </div>
+    <!-- 每日新闻 -->
+    <DailyNewsPanel />
     <div class="quote-decoration"></div>
 
     <!-- 新闻详情弹窗 -->
@@ -128,9 +114,12 @@
   import { ReadingLamp, RefreshRight, Document, Close } from '@vtj/icons';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
+  import DailyNewsPanel from '@/components/news/DailyNewsPanel.vue';
+  import QuoteCategoryTag from '@/components/quotes/QuoteCategoryTag.vue';
+  import QuoteLibraryLink from '@/components/quotes/QuoteLibraryLink.vue';
   export default defineComponent({
     name: 'QuoteBanner',
-    components: { XIcon },
+    components: { XIcon, DailyNewsPanel, QuoteCategoryTag, QuoteLibraryLink },
     setup(props) {
       const provider = useProvider({ id: 'quote_banner', version: '1778918000716' });
       const state = reactive({
@@ -155,7 +144,8 @@
         noteText: '',
         obsidianId: '',
         obsidianSource: '',
-        sourceType: 'database'
+        sourceType: 'database',
+        category: ''
       });
       return { state, props, provider, ReadingLamp, RefreshRight, Document, Close };
     },
@@ -191,6 +181,7 @@
             this.state.obsidianId = data.obsidian_id || '';
             this.state.obsidianSource = data.obsidian_source || '';
             this.state.sourceType = data.source_type || 'database';
+            this.state.category = data.category || '';
             return;
           }
           res = await fetch('/api/quotes/random', { headers });
@@ -203,6 +194,7 @@
           this.state.obsidianId = data.obsidian_id || '';
           this.state.obsidianSource = data.obsidian_source || '';
           this.state.sourceType = data.source_type || 'database';
+          this.state.category = data.category || '';
         } catch (e) {
           console.warn('获取金句失败:', e);
           if (!this.state.quote || this.state.quote === '正在加载今日金句...') {

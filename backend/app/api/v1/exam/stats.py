@@ -20,6 +20,7 @@ from ....models.models import (
 from ....core.security import get_current_user, get_optional_user
 from ....services import growth_service, weakpoint_reader
 from ....services.growth_service import add_growth, get_level_info, GROWTH_RULES
+from ....services.coin_ledger import grant as grant_coins
 
 router = APIRouter(prefix="/api/stats",tags=["学习统计"])
 logger = logging.getLogger(__name__)
@@ -656,15 +657,14 @@ def ensure_daily_checkin(user_id: int, db: Session) -> bool:
     user.continuous_checkin_days = continuous_days
     user.total_checkin_days = total_days
     if coin_reward > 0:
-        user.total_coins = (user.total_coins or 0) + coin_reward
-        db.add(CoinRecord(
-            user_id=user_id,
-            coin_change=coin_reward,
-            current_balance=user.total_coins,
-            transaction_type="GAIN",
+        # 2026-11-04 M1：走金币台账，生成批次以支持 12 个月到期清零
+        grant_coins(
+            db,
+            user,
+            coin_reward,
             source_type="CHECKIN",
             description="每日签到奖励" + (f"（连续{continuous_days}天）" if streak_bonus else ""),
-        ))
+        )
     # 成长值
     add_growth(db, user, GROWTH_RULES["checkin"])
     if streak_bonus:

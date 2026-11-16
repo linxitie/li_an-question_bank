@@ -70,7 +70,7 @@ def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[s
     if not vault.exists() or not vault.is_dir():
         return {"ok": False, "error": "vault_not_found", "vault": str(vault)}
 
-    inbox = _safe_path(vault, "00-收件箱", "金句")
+    inbox = _safe_path(vault, "01-待审核")
     board = _safe_path(vault, "00-收件箱", "审核看板")
     report: dict[str, Any] = {
         "ok": True,
@@ -114,7 +114,7 @@ def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[s
                     _move(
                         vault,
                         path,
-                        "00-收件箱",
+                        "04-归档",
                         "冲突",
                         name=f"{uid}-{datetime.now():%Y%m%d_%H%M%S_%f}.md",
                     )
@@ -152,10 +152,15 @@ def sync_review_inbox(db: Session, vault: Path, dry_run: bool = False) -> dict[s
                     report["errors"].append(f"{uid}: {exc}")
                     continue
 
+            target_dir = (
+                "02-已发布" if action == "approve"
+                else "03-已拒绝" if action == "reject"
+                else "01-待审核"
+            )
             _move(
                 vault,
                 path,
-                "07-归档",
+                target_dir,
                 "审核记录",
                 name=f"{uid}-{datetime.now():%Y%m%d_%H%M%S_%f}.md",
             )

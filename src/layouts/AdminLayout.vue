@@ -35,8 +35,8 @@
             <span v-if="unreadCount > 0" class="badge">{{ unreadCount }}</span>
             <div v-if="showNotifications" class="notification-dropdown">
               <div class="notification-header">消息中心</div>
-              <div v-for="n in notifications" :key="n.id" class="notification-item" :class="{ unread: !n.read }" @click="notificationService.markAsRead(n.id)">
-                <span class="notification-type">{{ {system:'系统',approval:'审批',security:'安全',message:'消息'}[n.type] }}</span>
+              <div v-for="n in notifications" :key="n.id" class="notification-item" :class="{ unread: !n.read }" @click="onNotificationClick(n)">
+                <span class="notification-type">{{ {system:'系统',approval:'审批',security:'安全',message:'消息',feedback:'反馈',forum:'论坛'}[n.type] }}</span>
                 <span class="notification-title">{{ n.title }}</span>
                 <span class="notification-time">{{ n.time }}</span>
               </div>
@@ -110,6 +110,8 @@ export default defineComponent({
       { label: '资料管理', path: '/admin/materials', icon: '📚' },
   { label: '分类规则', path: '/admin/material-rules', icon: '🏷️' },
       { label: '论坛管理', path: '/admin/forum', icon: '💬' },
+      { label: '问题反馈', path: '/admin/feedback', icon: '📨' },
+      { label: '金币商城', path: '/admin/shop', icon: '🛒' },
       { label: '系统设置', path: '/admin/settings', icon: '⚙️' },
       { label: '日志审计', path: '/admin/logs', icon: '📋' },
       { label: '数据备份', path: '/admin/backup', icon: '💾' },
@@ -146,6 +148,21 @@ export default defineComponent({
       window.removeEventListener('avatar-updated', loadAvatar);
       notificationService.stopPolling();
     });
+
+    /** 2026-11-07：点击通知 → 标记已读并跳转（反馈会打开 /admin/feedback?open=ID） */
+    async function onNotificationClick(n: Notification) {
+      showNotifications.value = false;
+      await notificationService.markAsRead(n.id);
+      // 2026-11-09：没有 link 的通知按类型给默认落地页，保证每条都能跳转
+      const fallback: Record<string, string> = {
+        approval: '/admin/papers',
+        feedback: '/admin/feedback',
+        forum: '/admin/forum',
+        security: '/admin/logs'
+      };
+      const target = n.link || fallback[n.type] || '/admin/dashboard';
+      router.push(target);
+    }
 
     // 加载当前用户头像
     async function loadAvatar() {
@@ -227,16 +244,21 @@ export default defineComponent({
       avatarUrl,
       confirmLogout,
       changePassword,
-      notificationService
+      notificationService,
+      onNotificationClick
     };
   }
 });
 </script>
 
 <style scoped>
+/* 高度锁死 100vh + 隐藏外层溢出：让 .admin-main 成为全页唯一滚动容器。
+   此前只有 min-height，内容变长时滚动落在 document 上（实测 layout 高度 7903px vs 视口 900px），
+   侧栏的 sticky 会跟着页面走。 */
 .admin-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #F5F7FA;
 }
 

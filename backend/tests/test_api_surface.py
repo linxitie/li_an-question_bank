@@ -21,6 +21,64 @@ DOCUMENTED_FEEDBACK_MOVES = {
 }
 
 KNOWN_EXTRA_OPERATIONS = {
+    # ===== 远端 knowledge-ops（2026-11-05 合并时一并登记）=====
+    ("GET", "/api/admin/knowledge-ops/summary"),
+    ("GET", "/api/admin/knowledge-ops/policies"),
+    ("GET", "/api/admin/knowledge-ops/policies/{policy_id}"),
+    ("GET", "/api/admin/knowledge-ops/proposals"),
+    ("POST", "/api/admin/knowledge-ops/compile"),
+    ("POST", "/api/admin/knowledge-ops/preview"),
+
+    # ===== 自生长知识图谱 M3（2026-11-05）=====
+    # ===== 我的装扮（2026-11-05）=====
+    ("GET", "/api/user/decoration/mine"),
+    ("POST", "/api/user/decoration/equip-title"),
+    ("POST", "/api/user/decoration/equip-frame"),
+    ("GET", "/api/knowledge/kg/nodes/mine"),
+    ("GET", "/api/knowledge/kg/edges/mine"),
+    ("GET", "/api/knowledge/kg/sample"),
+    ("POST", "/api/knowledge/kg/generate"),
+    ("GET", "/api/knowledge/kg/habits/mine"),
+    ("POST", "/api/knowledge/kg/decay"),
+    # ===== 周任务设计分配 M1（2026-11-06，周任务设计分配 2027.1 包接入）=====
+    ("GET", "/api/v1/weekly-tasks/overview"),
+    ("GET", "/api/v1/weekly-tasks/plans"),
+    # ===== 周任务 M2（2026-11-05）=====
+    ("GET", "/api/tasks/weekly/pool"),
+    ("POST", "/api/tasks/weekly/pool/pin"),
+    ("POST", "/api/tasks/weekly/recalc"),
+    ("POST", "/api/tasks/weekly/expire"),
+    # ===== 金币购 M1.5（2026-11-05，卡密交付/待处理订单）=====
+    ("POST", "/api/admin/shop/products/{product_id}/codes"),
+    ("GET", "/api/admin/shop/products/{product_id}/codes/stats"),
+    ("GET", "/api/admin/shop/orders"),
+    ("POST", "/api/admin/shop/orders/{order_id}/ship"),
+    # ===== 金币购 M1（2026-11-04，R11：只登记不重算基线）=====
+    ("GET", "/api/coins/expiring"),
+    ("GET", "/api/coupons/mine"),
+    ("POST", "/api/coupons/grant"),
+    ("GET", "/api/shop/products/{product_id}/quote"),
+    ("GET", "/api/shop/exchange/mine"),
+    ("GET", "/api/admin/shop/stock-alerts"),
+    ("GET", "/api/shop/images/{name}"),
+    ("POST", "/api/admin/shop/upload-image"),
+    ("GET", "/api/admin/shop/options"),
+    ("POST", "/api/admin/shop/options"),
+    ("POST", "/api/admin/shop/options/sync-categories"),
+
+    ("POST", "/api/admin/shop/products/{product_id}/shelf"),
+    ("GET", "/api/admin/shop/metrics"),
+    # ===== 论坛本轮新增（2026-11-03/04，R11：只登记不重算基线）=====
+    ("POST", "/api/forum/drafts"),
+    ("GET", "/api/forum/drafts/mine"),
+    ("DELETE", "/api/forum/drafts/mine"),
+    ("GET", "/api/admin/forum/dashboard"),
+    ("POST", "/api/admin/forum/posts/batch"),
+    ("POST", "/api/admin/forum/posts/{post_id}/hide"),
+    ("POST", "/api/admin/forum/posts/{post_id}/unhide"),
+    ("POST", "/api/admin/forum/posts/{post_id}/pin"),
+    ("POST", "/api/forum/ai-title/suggest"),
+    ("POST", "/api/admin/forum/ai-titles/backfill"),
     ("GET", "/api/admin/feedback"),
     ("POST", "/api/admin/feedback/{feedback_id}/reply"),
     ("GET", "/health"),
@@ -108,6 +166,40 @@ KNOWN_EXTRA_OPERATIONS = {
     ("GET", "/api/practice/draft"),
     ("GET", "/api/practice/drafts"),
     ("DELETE", "/api/practice/draft"),
+    # R11 显式批准的新增（2026-11-03，任务「论坛敏感词自生长知识库」）：
+    # 只登记白名单，api_surface.json 仍保持 343 条冻结口径。
+    # 鉴权：require_admin（role_level >= 2）；Agent 无 HTTP 入口，只能经服务层提案。
+    # 输出：词条/政策/判定/任务/提案/审计哈希链/图谱/趋势/红队/Obsidian 投影/对账。
+    ("GET", "/api/v1/admin/content-guard/overview"),
+    ("GET", "/api/v1/admin/content-guard/terms"),
+    ("POST", "/api/v1/admin/content-guard/terms"),
+    ("PATCH", "/api/v1/admin/content-guard/terms/{term_id}"),
+    ("GET", "/api/v1/admin/content-guard/terms/{term_id}/variants"),
+    ("POST", "/api/v1/admin/content-guard/terms/{term_id}/variants"),
+    ("DELETE", "/api/v1/admin/content-guard/variants/{variant_id}"),
+    ("GET", "/api/v1/admin/content-guard/policies"),
+    ("POST", "/api/v1/admin/content-guard/policies"),
+    ("GET", "/api/v1/admin/content-guard/judgments"),
+    ("GET", "/api/v1/admin/content-guard/judgments/{judgment_id}"),
+    ("POST", "/api/v1/admin/content-guard/judgments/{judgment_id}/override"),
+    ("GET", "/api/v1/admin/content-guard/tasks"),
+    ("POST", "/api/v1/admin/content-guard/tasks/{task_id}/resolve"),
+    ("GET", "/api/v1/admin/content-guard/proposals"),
+    ("POST", "/api/v1/admin/content-guard/proposals"),
+    ("POST", "/api/v1/admin/content-guard/proposals/{proposal_id}/approve"),
+    ("POST", "/api/v1/admin/content-guard/proposals/{proposal_id}/reject"),
+    ("GET", "/api/v1/admin/content-guard/audit"),
+    ("GET", "/api/v1/admin/content-guard/audit/verify"),
+    ("GET", "/api/v1/admin/content-guard/graph"),
+    ("GET", "/api/v1/admin/content-guard/stats/trend"),
+    ("POST", "/api/v1/admin/content-guard/detect"),
+    ("POST", "/api/v1/admin/content-guard/redteam/run"),
+    ("GET", "/api/v1/admin/content-guard/redteam/samples"),
+    ("POST", "/api/v1/admin/content-guard/obsidian/export"),
+    ("POST", "/api/v1/admin/content-guard/obsidian/import"),
+    ("POST", "/api/v1/admin/content-guard/reconcile"),
+    ("POST", "/api/v1/admin/content-guard/seed"),
+    ("POST", "/api/v1/admin/content-guard/reload"),
     # ===== 远端 main 合并补登记（2026-11-04）=====
     # 来源：模块4（学习计划/能力雷达/成就）、模块7（联考小智/知识图谱/记忆/学习仪表盘）、
     # 论坛治理与练习管理员、媒体资产 F3、OCR 候选等端点随远端 main 合入；

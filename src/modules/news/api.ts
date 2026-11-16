@@ -34,6 +34,11 @@ export interface NewsItem {
   is_favorited: boolean;
   /** 后端权威已读标记（不来自 localStorage） */
   is_read: boolean;
+  ai_summary?: string;
+  ai_exam_points?: string[];
+  ai_entities?: Array<{ type: string; name: string }>;
+  ai_risk_flags?: string[];
+  ai_status?: string;
 }
 
 /** 列表查询参数（page / pageSize 由 store 做客户端分页，不发给后端） */
@@ -42,6 +47,8 @@ export interface NewsListQuery {
   pageSize?: number;
   source?: string;
   category?: string;
+  /** 标题/摘要/正文关键词，映射到后端 q 参数 */
+  keyword?: string;
   /** 后端单次返回上限 1..50 */
   limit?: number;
 }
@@ -72,7 +79,8 @@ export function fetchNewsList(
     params: {
       limit: query.limit ?? 20,
       source: query.source || undefined,
-      category: query.category || undefined
+      category: query.category || undefined,
+      q: query.keyword || undefined
     }
   });
 }
@@ -128,13 +136,31 @@ export interface NewsTimelineResult {
   items: NewsTimelineGroup[];
 }
 
-/** 按发布日期分组的时间线 */
-export function fetchNewsTimeline(limit = 50): Promise<NewsTimelineResult> {
-  return request<NewsTimelineResult>({
-    url: '/api/news/timeline',
-    method: 'GET',
-    params: { limit }
-  });
+/** 按发布日期分组的时间线；与列表共用 /api/news，避免两端口径不一致 */
+export async function fetchNewsTimeline(
+  limit = 50
+): Promise<NewsTimelineResult> {
+  const result = await fetchNewsList({ limit: Math.min(limit, 50) });
+  const groupMap = new Map<string, NewsTimelineItem[]>();
+  for (const item of result.items) {
+    const date = (item.publish_date || '未标注日期').slice(0, 10);
+    const mapped: NewsTimelineItem = {
+      news_id: item.id,
+      title: item.title,
+      source: item.source,
+      category: item.category,
+      url: item.url,
+      ai_summary: item.ai_summary || item.summary || '',
+      is_favorited: item.is_favorited
+    };
+    const bucket = groupMap.get(date);
+    if (bucket) bucket.push(mapped);
+    else groupMap.set(date, [mapped]);
+  }
+  return {
+    total: result.total,
+    items: Array.from(groupMap, ([date, items]) => ({ date, items }))
+  };
 }
 
 export interface NewsDigestCategory {

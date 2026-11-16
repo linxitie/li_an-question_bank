@@ -37,7 +37,8 @@ _HIGH_RISK_TERMS = (
 def _prompt(news: NewsArticle) -> str:
     return (
         "请处理下面这篇新闻，输出 JSON：\n"
-        '{"summary":"100字以内摘要","exam_points":["申论考点1"],'
+        "摘要必须完整成句，控制在 150–220 字，不要截断半句话。\n"
+        '{"summary":"150-220字完整摘要","exam_points":["申论考点1"],'
         '"official_phrases":["官方表述原文"],'
         '"entities":[{"type":"person|organization|policy|region","name":"..."}],'
         '"risk_flags":["..."],"confidence":0.0}\n'
@@ -82,7 +83,11 @@ def _fallback(news: NewsArticle) -> dict[str, Any]:
 
 
 def _normalize(data: dict[str, Any]) -> dict[str, Any]:
-    summary = str(data.get("summary") or "").strip()[:100]
+    summary = str(data.get("summary") or "").strip()[:400]
+    if summary and not re.search(r"[。！？!?]$", summary):
+        boundary = max(summary.rfind("。"), summary.rfind("！"), summary.rfind("？"))
+        if boundary >= 100:
+            summary = summary[: boundary + 1]
     exam_points = [str(item) for item in (data.get("exam_points") or [])][:8]
     official = [str(item) for item in (data.get("official_phrases") or [])][:8]
     entities = []
@@ -121,20 +126,24 @@ def process_news(
     *,
     limit: int = 20,
     client: Callable[[str], str] | None = None,
+    include_fallback: bool = False,
 ) -> dict[str, Any]:
-    news_list = (
-        db.query(NewsArticle)
-        .filter(
-            or_(
-                NewsArticle.review_status == "pending",
-                NewsArticle.review_status == "high_risk",
-            ),
-            NewsArticle.ai_summary.is_(None),
+    query = db.query(NewsArticle).filter(
+        or_(
+            NewsArticle.review_status == "pending",
+            NewsArticle.review_status == "high_risk",
         )
-        .order_by(NewsArticle.news_id)
-        .limit(max(1, min(limit, 100)))
-        .all()
     )
+    if include_fallback:
+        query = query.filter(
+            or_(
+                NewsArticle.ai_summary.is_(None),
+                NewsArticle.ai_status == "fallback",
+            )
+        )
+    else:
+        query = query.filter(NewsArticle.ai_summary.is_(None))
+    news_list = query.order_by(NewsArticle.news_id).limit(max(1, min(limit, 100))).all()
     ok = 0
     fallback = 0
     high_risk = 0

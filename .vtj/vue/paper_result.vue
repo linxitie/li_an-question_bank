@@ -105,6 +105,13 @@
                 <span v-html="renderQuestionContent(d.answer_analysis)"></span>
               </div>
             </div>
+
+            <!-- 三顶帽子互评（7-5）：出题人 / 阅卷人 / 上岸学长 -->
+            <ReviewTrio
+              :question="String(d.question_content || '')"
+              :answer="String(d.student_answer || '')"
+              :analysis="String(d.answer_analysis || '')"
+            />
           </div>
 
           <!-- 无数据 -->
@@ -123,9 +130,11 @@ import { defineComponent, reactive, onMounted } from 'vue';
 import { useProvider } from '@vtj/renderer';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { buildExamSummary } from '@/utils/examSummary';
+import ReviewTrio from '@/components/assistant/ReviewTrio.vue';
 
 export default defineComponent({
   name: 'PaperResult',
+  components: { ReviewTrio },
   setup() {
     const provider = useProvider({ id: 'paper_result', version: '1' });
     const state = reactive({

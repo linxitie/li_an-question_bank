@@ -8,6 +8,11 @@
       <button @click="switchNav('zhanti')">查看</button>
     </div>
     <main class="wq-main">
+      <!-- 遗忘曲线复习提醒（模块4 P4） -->
+      <DueReviewCard />
+
+      <!-- 记忆强度曲线（4-2） -->
+      <MemoryCurve />
       <div class="wq-filter-bar">
         <div class="filter-group">
           <label> 收录时间</label>
@@ -418,10 +423,12 @@
   import { ElMessage } from 'element-plus';
 import { renderQuestionContent } from '@/utils/questionRender';
 import { useWrongbookStore } from '@/modules/wrongbook/store';
+import DueReviewCard from '@/components/review/DueReviewCard.vue';
+import MemoryCurve from '@/components/review/MemoryCurve.vue';
 import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wrongbook/events';
   export default defineComponent({
     name: 'WrongQuestionSet',
-    components: { NavBar, XIcon },
+    components: { NavBar, XIcon, DueReviewCard, MemoryCurve },
     setup(props) {
       const provider = useProvider({ id: 'wrong_questions', version: '1785754600000' });
       const wrongbookStore = useWrongbookStore();

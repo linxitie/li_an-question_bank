@@ -11,6 +11,7 @@ from sqlalchemy import func
 from ....core.database import get_db
 from ....core.security import get_current_user
 from ....models.models import SysUser, CoinRecord
+from ....services import coin_ledger
 
 router = APIRouter(prefix="/api/coins", tags=["金币"])
 
@@ -35,11 +36,25 @@ async def coins_overview(
         CoinRecord.transaction_time >= month_start,
     ).scalar() or 0
 
+    # M1：把"快到期"的额度一起返回，前端可在余额旁提示，避免用户白丢金币
+    expiring = coin_ledger.expiring_soon(db, current_user.user_id, days=30)
+
     return {
         "balance": current_user.total_coins or 0,
         "month_income": int(income),
         "month_expense": abs(int(expense)),
+        "expiring_30d": expiring["total"],
     }
+
+
+@router.get("/expiring", summary="近 N 天将到期的金币明细")
+async def coins_expiring(
+    days: int = Query(30, ge=1, le=365),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """金币有效期 12 个月滚动清零；该接口供"到期提醒"与"兜底换券"入口使用。"""
+    return coin_ledger.expiring_soon(db, current_user.user_id, days=days)
 
 
 @router.get("/transactions", summary="金币流水（分页）")

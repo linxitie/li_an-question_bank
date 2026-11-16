@@ -2,25 +2,34 @@
   <div class="goal-card">
     <div class="goal-header">
       <XIcon :icon="Flag" :size="20" color="#c41e3a"></XIcon>
-      <span class="goal-title">个人小目标</span>
-      <button class="add-goal-btn" @click="openCreateDialog">
+      <span class="goal-title">任务列表</span>
+      <button v-if="state.activeTab === 'custom'" class="add-goal-btn" @click="openCreateDialog">
         <span>+ 新增目标</span>
       </button>
     </div>
 
+    <div class="goal-tabs">
+      <button
+        v-for="tab in state.tabs"
+        :key="tab.key"
+        :class="['goal-tab', { on: state.activeTab === tab.key }]"
+        @click="switchTab(tab.key)">{{ tab.label }}</button>
+    </div>
+
     <div class="goal-content">
       <!-- 加载中 -->
-      <div v-if="state.loading" class="goal-loading">
+      <div v-if="state.activeTab === 'custom' && state.loading" class="goal-loading">
         <span>加载中...</span>
       </div>
 
       <!-- 空状态 -->
-      <div v-else-if="state.goals.length === 0" class="goal-empty">
+      <div v-else-if="state.activeTab === 'custom' && state.goals.length === 0" class="goal-empty">
         <span class="empty-icon">🎯</span>
         <p>还没有设计目标哦！</p>
       </div>
 
-      <!-- 目标卡片列表 -->
+      <!-- 自定义任务 -->
+      <template v-if="state.activeTab === 'custom'">
       <div v-for="goal in state.goals" :key="goal.goal_id" class="goal-item-card">
         <div class="goal-card-top">
           <span :class="['goal-type-badge', goal.goal_type.toLowerCase()]">
@@ -65,6 +74,29 @@
           <button
             class="goal-action-btn delete-btn"
             @click="deleteGoal(goal.goal_id)">删除</button>
+        </div>
+      </div>
+      </template>
+
+      <!-- 商城日常/周任务 -->
+      <div v-if="state.activeTab !== 'custom'">
+        <div v-if="state.taskLoading" class="goal-loading"><span>加载中...</span></div>
+        <div v-else-if="!currentTasks().length" class="goal-empty"><span class="empty-icon">📋</span><p>暂无任务</p></div>
+        <div v-for="t in currentTasks()" :key="t.task_id" class="goal-item-card">
+          <div class="goal-card-top">
+            <span v-if="t.is_kg_generated" class="goal-type-badge kg">知识图谱生成</span>
+            <span v-if="t.completed" class="status-badge completed">已完成</span>
+          </div>
+          <div class="goal-card-title">
+            {{ t.description || t.title }}<em v-if="t.description" class="task-sub">（可获得「{{ t.title }}」）</em>
+          </div>
+          <div class="goal-progress-bar">
+            <div class="progress-fill" :style="{ width: taskPct(t) + '%' }"></div>
+          </div>
+          <div class="goal-stats">
+            <span class="goal-percent">{{ t.current }}/{{ t.threshold }}</span>
+            <span class="goal-count">🪙 {{ t.reward_coins }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -146,6 +178,14 @@ export default defineComponent({
     const state = reactive({
       goals: [],
       loading: false,
+      activeTab: 'custom',
+      taskLoading: false,
+      tasks: { daily: [], weekly: [] },
+      tabs: [
+        { key: 'custom', label: '自定义任务' },
+        { key: 'weekly', label: '周任务' },
+        { key: 'daily', label: '日常任务' }
+      ],
       showDialog: false,
       dialogMode: 'create',
       editingGoalId: null,
@@ -332,7 +372,33 @@ export default defineComponent({
       const hour = String(d.getHours()).padStart(2, '0');
       const min = String(d.getMinutes()).padStart(2, '0');
       return month + '月' + day + '日 ' + hour + ':' + min;
-    }
+    },
+    switchTab(key) {
+      this.state.activeTab = key;
+      if (key !== 'custom' && !this.state.tasks.daily.length && !this.state.tasks.weekly.length) {
+        this.loadTasks();
+      }
+    },
+    async loadTasks() {
+      this.state.taskLoading = true;
+      try {
+        const res = await window.__VTJ_AUTH__.apiFetch('/api/tasks/overview');
+        const data = await res.json();
+        this.state.tasks.daily = data.daily || [];
+        this.state.tasks.weekly = data.weekly || [];
+      } catch (e) {
+        this.state.tasks = { daily: [], weekly: [] };
+      } finally {
+        this.state.taskLoading = false;
+      }
+    },
+    currentTasks() {
+      return this.state.activeTab === 'weekly' ? this.state.tasks.weekly : this.state.tasks.daily;
+    },
+    taskPct(t) {
+      const total = Number(t.threshold) || 0;
+      return total ? Math.min(100, Math.round(((Number(t.current) || 0) / total) * 100)) : 0;
+    },
   },
   mounted() {
     this.fetchGoals();
@@ -695,4 +761,37 @@ export default defineComponent({
 .dialog-btn.save-btn:hover {
   background: #a01830;
 }
+
+.goal-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin: 10px 0 4px;
+  padding: 0 2px;
+}
+.goal-tab {
+  flex: 1 1 0;
+  border: 1px solid #e6e9f2;
+  background: #fff;
+  border-radius: 999px;
+  padding: 4px 6px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #5b6b84;
+  cursor: pointer;
+  white-space: nowrap;
+  text-align: center;
+}
+.goal-tab.on {
+  background: #c41e3a;
+  border-color: #c41e3a;
+  color: #fff;
+}
+.goal-content {
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.task-sub { font-style: normal; color: #8a8faa; font-size: 12px; }
+.goal-type-badge.kg { background: #eef2ff; color: #4f46e5; }
 </style>

@@ -8,6 +8,7 @@
         <span class="header-title">招考信息</span>
       </div>
       <span class="header-badge pulse-dot">实时更新</span>
+      <RecruitmentRadarEntry />
     </div>
 
     <!-- 加载状态 -->
@@ -109,10 +110,11 @@ import { Opportunity } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 import { sanitizeHtml } from '@/utils/questionRender';
 import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
+import RecruitmentRadarEntry from '@/components/recruitment/RecruitmentRadarEntry.vue';
 
 export default defineComponent({
   name: 'RecruitmentInfo',
-  components: { XIcon },
+  components: { XIcon, RecruitmentRadarEntry },
   setup(props) {
     const provider = useProvider({ id: 'recruitment_info', version: '1785750000101' });
     const state = reactive({

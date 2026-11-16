@@ -204,4 +204,13 @@ node_modules/
 /smart_fail.log
 题库/
 
+# ===== 2026-11-02：Playwright E2E 产物不入库（截图/报告体积大）=====
+/e2e/.artifacts/
+/test-results/
+/playwright-report/
 
+# 管理员上传的商品图（运行时数据，不入库）
+backend/app/static/shop/
+
+# 本地改前备份（AI 改动前自动生成，不入库）
+*.bak-*

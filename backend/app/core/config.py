@@ -15,7 +15,7 @@ except ImportError:
 
     AliasChoices = None  # type: ignore[assignment]
 
-# 大模型密钥的两种历史写法：规范名 LLM_API_KEY，以及仓库根 .env 里的 DEEPSEEK_API_KEY。
+# 大模型密钥的两种历史写法：规范名 LLM_API_KEY，以及仓库根 .env 里的历史变量名（向后兼容保留）。
 # 放到模块级常量，既让两种写法都生效，也避免在 config 类里写多行 Field() 被凭据扫描误判。
 _LLM_KEY_ALIASES = (
     AliasChoices("LLM_API_KEY", "DEEPSEEK_API_KEY") if AliasChoices else "LLM_API_KEY"
@@ -68,11 +68,11 @@ class Settings(BaseSettings):
     FFMPEG_PATH: str = Field("ffmpeg", env="FFMPEG_PATH")
 
     # ==================== 大模型配置（联考小智/学习计划）====================
-    # 密钥两种写法都认：LLM_API_KEY（本文件模板的规范名）与 DEEPSEEK_API_KEY
+    # 密钥两种写法都认：LLM_API_KEY（规范名）与历史变量名（只做兼容，不再新写）
     # （仓库根 .env 的历史写法）。此前只认 LLM_API_KEY，根 .env 里已有可用密钥
     # 却读不到，请求带着 "Bearer None" 打到上游，表现为「大模型返回错误（401）」。
     LLM_API_KEY: Optional[str] = Field(None, validation_alias=_LLM_KEY_ALIASES)
-    # DeepSeek 的 OpenAI 兼容地址；旧的 http://localhost:8080 默认值会导致必然连不上
+    # 大模型服务的 OpenAI 兼容地址（可换任意兼容网关）；旧的 localhost:8080 默认值必然连不上
     LLM_API_URL: str = Field("https://api.deepseek.com/v1", env="LLM_API_URL")
     # 模型名（OpenAI Chat Completions 兼容协议）
     LLM_MODEL: str = Field("deepseek-chat", env="LLM_MODEL")
@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     LLM_TIMEOUT: float = Field(60.0, env="LLM_TIMEOUT")
     # 多轮会话携带的最大历史条数
     LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
+
+    # 全局限流（每 IP 每分钟请求数）。默认 300 与线上一致；
+    # 本机跑 e2e 时请求量会超过它，可在 backend/.env 里调高，避免自己把自己限流。
+    RATE_LIMIT_PER_MINUTE: int = Field(300, env="RATE_LIMIT_PER_MINUTE")
 
     # 日志配置
     LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
@@ -253,6 +257,28 @@ class Settings(BaseSettings):
     MATERIAL_CLASSIFIER_ENABLED: bool = Field(True, env="MATERIAL_CLASSIFIER_ENABLED")
     # 去重检测开关
     MATERIAL_DEDUP_ENABLED: bool = Field(True, env="MATERIAL_DEDUP_ENABLED")
+
+    # ==================== Obsidian 独立 Vault ====================
+    # 三个业务模块物理隔离，禁止写入同一个根目录
+    VAULT_PATH_QUOTE: str = Field(
+        r"D:\砺安题库\li_an-question_bank\每日金句知识库", env="VAULT_PATH_QUOTE"
+    )
+    VAULT_PATH_NEWS: str = Field(
+        r"D:\砺安题库\li_an-question_bank\backend\content_hub_vault", env="VAULT_PATH_NEWS"
+    )
+    VAULT_PATH_JOB: str = Field(
+        r"D:\砺安题库\li_an-question_bank\招考信息知识库", env="VAULT_PATH_JOB"
+    )
+
+    # ==================== 评论区舆情审核（M0 影子期，默认全关） ====================
+    # 政策库来源：Obsidian vault 根目录；编译器内部再拼「AI舆情审核知识库/政策库」
+    MODERATION_VAULT_DIR: str = Field(r"D:\Obsidian仓库", env="MODERATION_VAULT_DIR")
+    # 是否允许「发布规则集」写盘；关闭时知识运营接口只读（仍可试编译与试判）
+    MODERATION_VAULT_WRITE: bool = Field(False, env="MODERATION_VAULT_WRITE")
+    # 评论入库时是否跑影子判定（只落日志、不影响展示）；M0 默认关闭
+    FORUM_AI_SHADOW: bool = Field(False, env="FORUM_AI_SHADOW")
+    # 是否允许规则输出 block；首月上限 A2 时保持 False，block 会被降级为 mask
+    MODERATION_ENFORCE_BLOCK: bool = Field(False, env="MODERATION_ENFORCE_BLOCK")
 
     # ==================== 大模型配置（联考小智/学习计划） ====================
     # 统一在文件上方的「大模型配置」块定义；此处原为重复定义，后者会静默覆盖前者

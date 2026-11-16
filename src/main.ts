@@ -19,9 +19,11 @@ import router from './router';
 import App from './App.vue';
 import { vtj, name } from '../package.json';
 import './style/index.scss';
+import './styles/design-system.css';  // 内容型页面统一设计令牌（远端 main，2026-11）
 import './styles/admin-tokens.css';   // 管理端设计令牌（A0）：CSS 变量 + .adm-btn/.adm-input 工具类
 import './auth';   // 共享认证模块 → window.__VTJ_AUTH__
 import { registerImageRetry } from './image-retry';  // 第9层防线：图片智能重试
+import { installChunkRecovery } from './utils/chunkRecovery';  // 第10层防线：页面模块加载失败自动恢复
 // 2026-11-04：徽章展示模块下线 → 「我的」页内徽章入口注入一并移除
 import { installMaterialsCreateEntry } from './utils/materialsCreateEntry';  // PC 资料页「创建卡片」入口（DOM 注入）
 import { installTabletMaterialsEntry } from './utils/tabletMaterialsEntry';  // 平板首页「备考资料」入口（DOM 注入）
@@ -30,6 +32,8 @@ import { installAdminImportTypeFix } from './utils/adminImportTypeFix';  // 旧�
 
 // 注册全局图片重试函数（第9层防线）
 registerImageRetry();
+// 页面模块加载失败自动重载（第10层防线）
+installChunkRecovery();
 
 const app = createApp(App);
 const pinia = createPinia();
@@ -58,6 +62,11 @@ const { provider, onReady } = createProvider({
  * 版本自检：前端产物由 vite 注入 __BUILD_SHA__，后端 /health 返回 revision。
  * 为什么需要它：浏览器标签页/后端进程缓存旧代码时，新功能会表现为「功能开发中」或 404，
  * 这属于版本不一致而非功能缺失。显式比对后直接在控制台与页面告警，避免再次误判。
+ *
+ * 2026-11-03 修正：dev 环境下前端 SHA 是 **vite 启动那一刻**烘焙进去的（vite.config.ts），
+ * 后端 SHA 是 **后端启动那一刻**取的（main.py）。两者只要不同时启动就必然不同，
+ * 重启后端也追不上前端那份旧值 —— 强告警在 dev 下永远消不掉，属噪音。
+ * 因此：dev 只打印 info；只有生产构建才做「同提交可比」的强校验。
  */
 async function checkVersionConsistency(): Promise<void> {
   // 用 typeof 兜底：dev server 未重启或未注入 define 时不能抛 ReferenceError 打断页面
@@ -65,6 +74,8 @@ async function checkVersionConsistency(): Promise<void> {
   const frontendTime = typeof __BUILD_TIME__ === 'string' ? __BUILD_TIME__ : new Date().toISOString();
   window.__APP_BUILD__ = { sha: frontendSha, time: frontendTime };
   console.info(`[砺安题库] 前端构建 ${frontendSha} @ ${frontendTime}`);
+
+  const isDev = import.meta.env.DEV;
   try {
     const res = await fetch('/health', { cache: 'no-store' });
     if (!res.ok) return;
@@ -72,10 +83,21 @@ async function checkVersionConsistency(): Promise<void> {
     const backend = typeof data?.revision === 'string' ? data.revision : '';
     window.__APP_BUILD__.backend = backend;
     if (!backend || backend === 'unknown' || frontendSha === 'unknown') return;
+
+    if (isDev) {
+      // dev 下两端启动时刻不同，SHA 不同步是常态，只留排查信息不打扰用户
+      if (backend !== frontendSha) {
+        console.info(
+          `[砺安题库] dev 模式：前端 SHA ${frontendSha} / 后端 ${backend}（属正常，dev server 与后端启动时刻不同）`
+        );
+      }
+      return;
+    }
+
     if (backend === frontendSha) return;
     window.__VERSION_MISMATCH__ = { frontend: frontendSha, backend };
     console.warn(
-      `[砺安题库] 前后端版本不一致：前端 ${frontendSha} / 后端 ${backend}，请刷新页面；仍不一致则重启后端`
+      `[砺安题库] 前后端版本不一致：前端 ${frontendSha} / 后端 ${backend}`
     );
     // dev 环境不弹 toast，只打日志（2026-11-07）：
     // `__BUILD_SHA__` 是 **vite 启动那一刻** 的 `git rev-parse --short HEAD`（见 vite.config 的 define），
@@ -85,7 +107,7 @@ async function checkVersionConsistency(): Promise<void> {
     if (process.env.NODE_ENV !== 'production') return;
     const { ElMessage } = await import('element-plus');
     ElMessage.warning({
-      message: '检测到前后端版本不一致，请刷新页面（后端需重启到最新版本）',
+      message: `检测到前后端版本不一致（前端 ${frontendSha} / 后端 ${backend}），请刷新页面；若仍不一致则重启后端`,
       duration: 8000,
     });
   } catch {
@@ -106,6 +128,12 @@ onReady(async () => {
   app.use(provider);
   app.use(IconsPlugin);
   app.mount('#app');
+  // 自动恢复重载后清掉 URL 上的临时参数，避免脏链接被复制/收藏
+  if (window.location.search.includes('__reload=')) {
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete('__reload');
+    window.history.replaceState(window.history.state, '', clean.toString());
+  }
   void checkVersionConsistency();
   // 三科资料页是 VTJ 页面 → 运行时在顶栏下方注入「创建卡片 / Excel 批量导入」入口
   installMaterialsCreateEntry();

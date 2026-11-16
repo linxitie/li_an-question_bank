@@ -143,7 +143,7 @@ onMounted(() => {
 
 <style scoped>
 .emoji-panel {
-  width: 300px;
+  width: 600px;
   max-width: calc(100vw - 24px);
   background: #fff;
   border: 1px solid #e8ecf1;
@@ -184,17 +184,17 @@ onMounted(() => {
 .emoji-grid {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 2px;
-  padding: 8px;
-  max-height: 220px;
+  gap: 4px;
+  padding: 12px;
+  max-height: 440px;
   overflow-y: auto;
 }
 .emoji-cell {
   background: none;
   border: none;
-  font-size: 20px;
+  font-size: 36px;
   line-height: 1;
-  padding: 6px 0;
+  padding: 10px 0;
   border-radius: 6px;
   cursor: pointer;
 }
@@ -202,13 +202,13 @@ onMounted(() => {
   background: #f5f7fa;
 }
 .sticker-area {
-  padding: 10px;
+  padding: 16px;
 }
 .sticker-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  max-height: 200px;
+  gap: 14px;
+  max-height: 400px;
   overflow-y: auto;
 }
 .sticker-cell {

@@ -66,36 +66,14 @@
       </section>
 
       <!-- 每日金句 -->
-      <section class="quote-section">
-        <div class="quote-card">
-          <XIcon :icon="ChatDotRound" :size="24" color="#f59e0b" class="quote-icon"></XIcon>
-          <p class="quote-text">{{ dailyQuote }}</p>
-          <p class="quote-author">—— {{ quoteAttribution }}</p>
-          <button class="quote-refresh" :disabled="quoteLoading" @click="refreshQuote">
-            {{ quoteLoading ? '加载中…' : '换一句' }}
-          </button>
-        </div>
-      </section>
+      <MobileDailyQuote />
+
+      <!-- 招考雷达：放在每日新闻之前，避免入口沉到长列表底部 -->
+      <RecruitmentRadarEntry />
 
       <!-- 每日新闻 -->
-      <section class="news-section">
-        <div class="section-header">
-          <h2 class="section-title">
-            <XIcon :icon="Document" :size="20" color="#1A365D"></XIcon>
-            每日新闻
-          </h2>
-          <span class="section-action" @click="viewAllNews">
-            查看全部
-            <XIcon :icon="ArrowRight" :size="14" color="#1890ff"></XIcon>
-          </span>
-        </div>
-        <div class="news-list">
-          <div class="news-item" v-for="(news, index) in newsList" :key="index" @click="viewNews(news)">
-            <XIcon :icon="Right" :size="12" color="#1A365D"></XIcon>
-            <span class="news-title">{{ news.title }}</span>
-          </div>
-        </div>
-      </section>
+      <!-- 每日新闻 -->
+      <MobileDailyNews />
 
       <!-- 最近做题记录：三端共用同一组件 src/components/RecentPracticeRecords.vue，
            排序与条数完全一致（后端已按 recency 倒序，前端不二次排序）。 -->
@@ -176,6 +154,9 @@ import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
 import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
+import MobileDailyQuote from '@/components/quotes/MobileDailyQuote.vue';
+import MobileDailyNews from '@/components/news/MobileDailyNews.vue';
+import RecruitmentRadarEntry from '@/components/recruitment/RecruitmentRadarEntry.vue';
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
 import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
 import {
@@ -208,6 +189,9 @@ export default defineComponent({
     components: {
       XIcon,
       MobileTabBar,
+      MobileDailyQuote,
+      MobileDailyNews,
+      RecruitmentRadarEntry,
       RecentPracticeRecords
     },
   setup() {
@@ -441,7 +425,13 @@ const loadDailyGoal = async () => {
       if (!trendHasData.value) return;
       const el = trendChartRef.value;
       if (!el) return;
+      // 2026-11-11：容器还没布局完（0 宽高）时稍后重试，避免 ECharts 初始化告警
+      if (!el.clientWidth || !el.clientHeight) {
+        setTimeout(renderTrendChart, 80);
+        return;
+      }
       if (!trendInstance) trendInstance = echarts.init(el);
+      else trendInstance.resize();
       const isBar = chartType.value === 'bar';
       const series: any = isBar
         ? {

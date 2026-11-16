@@ -10,7 +10,7 @@
       {{ option.name }}
     </button>
     <button type="button" class="csb-btn order" @click="toggleOrder">
-      {{ order === 'desc' ? '最新在前' : '最早在前' }}
+      {{ order === 'desc' ? '倒序' : '正序' }}
     </button>
   </div>
 </template>

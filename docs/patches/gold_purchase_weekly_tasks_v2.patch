@@ -1,0 +1,22 @@
+--- a/.vtj/vue/gold_purchase.vue
++++ b/.vtj/vue/gold_purchase.vue
+@@ -142,7 +142,7 @@
+               <span class="task-progress">{{ t.qty }}{{ t.unit }}</span>
+               <span class="task-reward">🪙{{ t.coins }}</span>
+               <button class="task-btn" :disabled="!t.startable" @click="startWeeklyTask(t)">
+-                {{ t.startable ? '开始' : '待补题' }}
++                {{ t.startable ? '开始' : (t.blocked_label || '待补题') }}
+               </button>
+             </div>
+           </div>
+@@ -152,7 +152,9 @@
+               <span class="task-title">{{ t.title }}</span>
+               <span class="task-progress">{{ t.task_date }}</span>
+               <span class="task-reward">🪙{{ t.coins }}</span>
+-              <button class="task-btn" @click="startWeeklyTask(t)">开始</button>
++              <button class="task-btn" :disabled="!t.startable" @click="startWeeklyTask(t)">
++                {{ t.startable ? '开始' : (t.blocked_label || '待补题') }}
++              </button>
+             </div>
+           </div>
+           <p class="task-note" v-if="state.weekly.later_weeks.length">

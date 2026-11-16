@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/llm", tags=["联考小智"])
 
 MAX_MESSAGE_LEN = 2000
-Scene = Literal["psychological", "qa", "advice"]
+Scene = Literal["psychological", "qa", "advice", "essay", "interview", "coach"]
 
 
 # ==================== 请求模型 ====================
@@ -38,6 +38,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_MESSAGE_LEN, description="消息内容")
     session_id: Optional[int] = None
     scene: Scene = "qa"  # psychological / qa / advice
+    persist: bool = Field(True, description="false=一次性 AI 任务，不落会话/消息（作文批改/模拟面试/学习教练）")
 
 
 class CreateSessionRequest(BaseModel):
@@ -89,6 +90,24 @@ async def chat(
     """发送一条消息，返回大模型回复。带 session_id 则多轮，不带则自动新建会话。"""
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="消息内容不能为空")
+
+    # 0. 一次性 AI 任务（模块4/7 真功能）：不落会话/不写消息/不抽记忆，直接调大模型
+    if not req.persist:
+        try:
+            reply = await llm_client.chat(
+                messages=[{"role": "user", "content": req.message.strip()}],
+                scene=req.scene,
+            )
+        except llm_client.LLMClientError as e:
+            logger.warning("一次性 AI 任务调用失败: %s", e.message)
+            raise HTTPException(status_code=503, detail=e.message)
+        return {
+            "reply": reply,
+            "session_id": None,
+            "scene": req.scene,
+            "agent": "one_shot",
+            "agent_name": "AI 任务",
+        }
 
     # 1. 取或建会话
     is_new_session = False

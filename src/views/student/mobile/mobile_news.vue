@@ -4,35 +4,95 @@
     <header class="topbar">
       <button class="back-btn" @click="goBack" aria-label="返回">←</button>
       <h1 class="title">{{ currentNews ? '新闻详情' : '每日新闻' }}</h1>
-      <button v-if="!currentNews" class="timeline-btn" @click="openTimeline">时间线/日报</button>
-      <span v-else class="spacer"></span>
+      <button v-if="!currentNews" class="timeline-btn" @click="openTimeline">
+        时间线/日报
+      </button>
+      <router-link class="fav-link" :to="favoritesPath">收藏库</router-link>
+      <span v-if="currentNews" class="spacer"></span>
     </header>
 
+    <div v-if="route.params.id && detailLoading" class="detail-state">
+      新闻详情加载中...
+    </div>
+    <div v-else-if="route.params.id && detailError" class="detail-state error">
+      <span>{{ detailError }}</span>
+      <button type="button" @click="loadDetail(String(route.params.id))">
+        重试
+      </button>
+    </div>
+
+    <form
+      v-if="!currentNews && !route.params.id"
+      class="news-search"
+      @submit.prevent="searchNews">
+      <input
+        v-model="keyword"
+        type="search"
+        placeholder="搜索新闻标题、摘要、正文"
+        aria-label="搜索新闻" />
+      <button type="submit">搜索</button>
+      <button
+        v-if="keyword"
+        type="button"
+        class="clear-search"
+        @click="clearSearch">
+        清除
+      </button>
+    </form>
+
     <!-- 新闻列表 -->
-    <main v-if="!currentNews" class="news-list">
-      <div v-for="item in newsList" :key="item.id" class="news-item" @click="openDetail(item)">
+    <main v-if="!currentNews && !route.params.id" class="news-list">
+      <div
+        v-for="item in newsList"
+        :key="item.id"
+        class="news-item"
+        @click="openDetail(item)">
         <div class="news-title">{{ item.title }}</div>
-        <div class="news-meta">{{ item.source || '' }} · {{ formatTime(item.publish_date) }}</div>
+        <div class="news-meta">
+          {{ item.source || '' }} · {{ formatTime(item.publish_date) }}
+        </div>
       </div>
       <div v-if="!newsList.length && !loading" class="empty">暂无新闻</div>
       <div v-if="loading" class="empty">加载中...</div>
     </main>
 
     <!-- 新闻详情 -->
-    <main v-else class="news-detail">
+    <main v-else-if="currentNews" class="news-detail">
       <h2 class="detail-title">{{ currentNews.title }}</h2>
-      <div class="detail-meta">{{ currentNews.source || '' }} · {{ formatTime(currentNews.publish_date) }}</div>
-      <div ref="contentEl" class="detail-content" v-html="renderedContent"></div>
+      <div class="detail-meta">
+        {{ currentNews.source || '' }} ·
+        {{ formatTime(currentNews.publish_date) }}
+        <button
+          type="button"
+          class="detail-favorite"
+          :class="{ active: currentNews.is_favorited }"
+          :aria-label="currentNews.is_favorited ? '取消收藏' : '收藏新闻'"
+          @click="toggleFavorite">
+          {{ currentNews.is_favorited ? '★' : '☆' }}
+        </button>
+      </div>
+      <p v-if="favoriteError" class="favorite-error">{{ favoriteError }}</p>
+      <NewsAICard
+        v-if="hasAi"
+        :summary="currentNews.ai_summary"
+        :exam-points="currentNews.ai_exam_points"
+        :entities="currentNews.ai_entities" />
+      <div v-else class="ai-empty">
+        <strong>AI 摘要与申论考点</strong>
+        <span>该新闻暂无 AI 解析内容。</span>
+      </div>
+      <div
+        ref="contentEl"
+        class="detail-content"
+        v-html="renderedContent"></div>
       <div
         v-if="displayImages.length && !hasInlineMarkers"
-        class="detail-images"
-      >
+        class="detail-images">
         <img
           v-for="(src, idx) in displayImages"
           :key="src + '-' + idx"
           :src="src"
-          :alt="'图片' + (idx + 1)"
-        />
+          :alt="'图片' + (idx + 1)" />
       </div>
 
       <!-- 选中文字操作菜单（5 色划线 + 想法） -->
@@ -41,21 +101,22 @@
         class="selection-menu"
         :style="{ top: menuPos.y + 'px', left: menuPos.x + 'px' }"
         @mousedown.prevent
-        @touchstart.prevent
-      >
+        @touchstart.prevent>
         <button
           v-for="c in colors"
           :key="c"
           class="color-dot"
           :style="{ background: c }"
-          @click="applyHighlight(c)"
-        />
+          @click="applyHighlight(c)" />
         <button class="note-btn" @click="openNoteInput">📝 想法</button>
       </div>
 
       <!-- 想法输入 -->
       <div v-if="noteInputVisible" class="note-input">
-        <textarea v-model="noteText" class="note-textarea" placeholder="记录想法…" />
+        <textarea
+          v-model="noteText"
+          class="note-textarea"
+          placeholder="记录想法…" />
         <div class="note-actions">
           <button class="cancel" @click="cancelNoteInput">取消</button>
           <button class="save" @click="saveNote">保存</button>
@@ -66,14 +127,20 @@
       <div v-if="notes.length" class="notes-section">
         <h4 class="notes-title">我的笔记 ({{ notes.length }})</h4>
         <div v-for="n in notes" :key="n.note_id" class="note-item">
-          <blockquote v-if="n.quote_text" class="note-quote" :style="renderNoteStyle(n)">
+          <blockquote
+            v-if="n.quote_text"
+            class="note-quote"
+            :style="renderNoteStyle(n)">
             {{ n.quote_text }}
           </blockquote>
           <p v-if="n.note_text" class="note-text">{{ n.note_text }}</p>
-          <button class="delete-btn" @click="removeNote(n.note_id)">删除</button>
+          <button class="delete-btn" @click="removeNote(n.note_id)">
+            删除
+          </button>
         </div>
       </div>
     </main>
+    <MobileTabBar active="home" />
   </div>
 </template>
 
@@ -83,6 +150,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { renderNewsContent, dedupeNewsImages } from '@/utils/newsRender';
 import { useNewsStore } from '@/modules/news/store';
 import type { NewsItem } from '@/modules/news/api';
+import { toggleNewsFavorite } from '@/modules/news/api';
+import NewsAICard from '@/components/news/NewsAICard.vue';
+import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -93,9 +163,31 @@ const newsStore = useNewsStore();
 const newsList = computed<NewsItem[]>(() => newsStore.items);
 const loading = computed(() => newsStore.loading);
 
-interface NewsImage { url?: string; order?: number; [key: string]: any; }
+interface NewsImage {
+  url?: string;
+  order?: number;
+  [key: string]: any;
+}
 const currentNews = computed<NewsItem | null>(() => newsStore.selected);
+const hasAi = computed(
+  () =>
+    !!currentNews.value &&
+    Boolean(
+      currentNews.value.ai_summary ||
+      currentNews.value.ai_exam_points?.length ||
+      currentNews.value.ai_entities?.length
+    )
+);
 const notes = ref<any[]>([]);
+const favoriteError = ref('');
+const detailLoading = ref(Boolean(route.params.id));
+const detailError = ref('');
+const keyword = ref('');
+const favoritesPath = computed(() =>
+  route.path.startsWith('/tablet')
+    ? '/tablet/news/favorites'
+    : '/mobile/favorites'
+);
 /** 正文容器引用：划线时用于判定选区是否落在正文内 */
 const contentEl = ref<HTMLElement | null>(null);
 
@@ -126,7 +218,11 @@ const displayImages = computed(() =>
 const highlights = computed(() =>
   notes.value
     .filter((n) => n && n.quote_text)
-    .map((n) => ({ quote_text: n.quote_text, color: n.color, line_style: n.line_style }))
+    .map((n) => ({
+      quote_text: n.quote_text,
+      color: n.color,
+      line_style: n.line_style
+    }))
 );
 
 /** 正文渲染统一走 newsRender.js（其内部复用 questionRender.js 的 sanitizeHtml） */
@@ -170,14 +266,43 @@ const formatTime = (iso?: string | null) => {
 
 const fetchNews = async () => {
   // 列表只读，不上报阅读；已读标记由后端随列表返回
-  await newsStore.load({ limit: 20 });
+  await newsStore.load({
+    limit: 50,
+    keyword: keyword.value.trim() || undefined
+  });
+};
+
+const searchNews = async () => {
+  await fetchNews();
+};
+
+const clearSearch = async () => {
+  keyword.value = '';
+  await fetchNews();
+};
+
+const loadDetail = async (id: string): Promise<NewsItem | null> => {
+  detailLoading.value = true;
+  detailError.value = '';
+  try {
+    const detail = await newsStore.openArticle(id);
+    if (!detail) {
+      detailError.value = '新闻详情加载失败，请检查网络后重试';
+      return null;
+    }
+    return detail;
+  } catch (e) {
+    detailError.value = e instanceof Error ? e.message : '新闻详情加载失败';
+    return null;
+  } finally {
+    detailLoading.value = false;
+  }
 };
 
 const openDetail = async (item: NewsItem) => {
   notes.value = [];
-  // 详情接口即阅读上报入口：登录用户首次打开由后端记录已读并发布 news.read
-  const detail = await newsStore.openArticle(item.id, item);
-  await fetchNotes(detail ? detail.id : item.id);
+  const detail = await loadDetail(String(item.id));
+  if (detail) await fetchNotes(detail.id);
 };
 
 /**
@@ -229,16 +354,19 @@ const applyHighlight = async (color: string) => {
   highlightColor.value = color;
   const newsId = currentNews.value.id;
   try {
-    await (window as any).__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        note_text: '',
-        quote_text: selectedText.value,
-        color: color,
-        line_style: lineStyle.value
-      })
-    });
+    await (window as any).__VTJ_AUTH__.apiFetch(
+      '/api/news/' + newsId + '/note',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          note_text: '',
+          quote_text: selectedText.value,
+          color: color,
+          line_style: lineStyle.value
+        })
+      }
+    );
     clearSelection();
     await fetchNotes(newsId);
   } catch (e) {
@@ -266,16 +394,19 @@ const saveNote = async () => {
   }
   const newsId = currentNews.value.id;
   try {
-    await (window as any).__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/note', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        note_text: thought,
-        quote_text: selectedText.value,
-        color: highlightColor.value,
-        line_style: lineStyle.value
-      })
-    });
+    await (window as any).__VTJ_AUTH__.apiFetch(
+      '/api/news/' + newsId + '/note',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          note_text: thought,
+          quote_text: selectedText.value,
+          color: highlightColor.value,
+          line_style: lineStyle.value
+        })
+      }
+    );
     noteInputVisible.value = false;
     noteText.value = '';
     clearSelection();
@@ -287,9 +418,22 @@ const saveNote = async () => {
   }
 };
 
+async function toggleFavorite(): Promise<void> {
+  if (!currentNews.value) return;
+  favoriteError.value = '';
+  try {
+    const result = await toggleNewsFavorite(currentNews.value.id);
+    currentNews.value.is_favorited = result.favorited;
+  } catch (e) {
+    favoriteError.value = e instanceof Error ? e.message : '收藏失败';
+  }
+}
+
 const fetchNotes = async (newsId: number) => {
   try {
-    const res = await (window as any).__VTJ_AUTH__.apiFetch('/api/news/' + newsId + '/notes');
+    const res = await (window as any).__VTJ_AUTH__.apiFetch(
+      '/api/news/' + newsId + '/notes'
+    );
     const data = await res.json();
     if (res.ok) notes.value = data.items || [];
   } catch (e) {
@@ -299,7 +443,9 @@ const fetchNotes = async (newsId: number) => {
 
 const removeNote = async (noteId: number) => {
   try {
-    await (window as any).__VTJ_AUTH__.apiFetch('/api/news/notes/' + noteId, { method: 'DELETE' });
+    await (window as any).__VTJ_AUTH__.apiFetch('/api/news/notes/' + noteId, {
+      method: 'DELETE'
+    });
     notes.value = notes.value.filter((n) => n.note_id !== noteId);
   } catch (e) {
     console.error('删除笔记失败:', e);
@@ -308,9 +454,12 @@ const removeNote = async (noteId: number) => {
 
 const renderNoteStyle = (note: any) => {
   const c = note.color || '#FFD700';
-  if (note.line_style === 'wavy') return 'text-decoration: underline wavy ' + c + ';';
-  if (note.line_style === 'straight') return 'text-decoration: underline ' + c + ';';
-  if (note.line_style === 'marker') return 'background-color: ' + c + '40; padding: 0 2px;';
+  if (note.line_style === 'wavy')
+    return 'text-decoration: underline wavy ' + c + ';';
+  if (note.line_style === 'straight')
+    return 'text-decoration: underline ' + c + ';';
+  if (note.line_style === 'marker')
+    return 'background-color: ' + c + '40; padding: 0 2px;';
   return 'border-left: 3px solid ' + c + ';';
 };
 
@@ -321,7 +470,7 @@ onMounted(() => {
   if (id) {
     // 直接打开指定新闻详情（同样经详情端点上报阅读）
     (async () => {
-      const detail = await newsStore.openArticle(String(id));
+      const detail = await loadDetail(String(id));
       if (detail) await fetchNotes(detail.id);
     })();
   } else {
@@ -337,7 +486,9 @@ onBeforeUnmount(() => {
 <style scoped>
 .mobile-news-page {
   min-height: 100vh;
-  background: #F5F7FA;
+  padding-bottom: 76px;
+  box-sizing: border-box;
+  background: #f5f7fa;
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   display: flex;
   flex-direction: column;
@@ -381,6 +532,76 @@ onBeforeUnmount(() => {
   cursor: pointer;
   white-space: nowrap;
 }
+.fav-link {
+  padding: 5px 8px;
+  color: #1a2b5f;
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.detail-state {
+  margin: 16px 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #fff;
+  color: #59635c;
+  font-size: 13px;
+  text-align: center;
+}
+.detail-state.error {
+  color: #a33b2d;
+}
+.detail-state button {
+  margin-left: 8px;
+  border: 1px solid #d6dfea;
+  border-radius: 6px;
+  background: #fff;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.ai-empty {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f7faf8;
+  color: #59635c;
+  font-size: 12px;
+}
+.ai-empty strong {
+  color: #1a2b5f;
+  font-size: 13px;
+}
+.news-search {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+.news-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #d6dfea;
+  border-radius: 8px;
+  background: #fff;
+  color: #1a2b5f;
+  font-size: 13px;
+}
+.news-search button {
+  border: 1px solid #1a2b5f;
+  border-radius: 8px;
+  background: #1a2b5f;
+  color: #fff;
+  padding: 0 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.news-search .clear-search {
+  border-color: #d6dfea;
+  background: #fff;
+  color: #59635c;
+}
 .news-list {
   flex: 1;
   padding: 12px;
@@ -422,11 +643,30 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 .detail-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: #8899aa;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid #f0f2f5;
+}
+.detail-favorite {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #a0a9b3;
+  font-size: 20px;
+  cursor: pointer;
+}
+.detail-favorite.active {
+  color: #c8763f;
+}
+.favorite-error {
+  margin: -8px 0 12px;
+  color: #a33b2d;
+  font-size: 12px;
 }
 .detail-content :deep(p) {
   font-size: 15px;
@@ -526,7 +766,7 @@ onBeforeUnmount(() => {
   color: #5a6488;
 }
 .note-actions .save {
-  background: linear-gradient(135deg, #1A365D 0%, #2a5298 100%);
+  background: linear-gradient(135deg, #1a365d 0%, #2a5298 100%);
   color: #fff;
 }
 .notes-section {

@@ -39,6 +39,34 @@ SCENE_SYSTEM_PROMPTS: Dict[str, str] = {
         "请给出具体、可落地的建议，结合公安联考的科目特点（行测、申论、公安专业科目）。"
         "回答控制在 250 字以内，分点作答。"
     ),
+    # 一次性 AI 任务（模块4/7 真功能）：严格 JSON 输出，由前端解析后渲染
+    "essay": (
+        "你是'联考小智'的申论作文批改老师，按公安联考申论作文评分标准批改考生作文。"
+        "严格只输出一个 JSON 对象，不要输出 JSON 以外的任何文字（不要 markdown 代码块）。"
+        'JSON 格式：{"total": 0-100 的整数, '
+        '"dimensions": [{"name": "立意", "score": 整数, "max": 20}, '
+        '{"name": "结构", "score": 整数, "max": 20}, '
+        '{"name": "内容", "score": 整数, "max": 30}, '
+        '{"name": "语言", "score": 整数, "max": 20}, '
+        '{"name": "卷面", "score": 整数, "max": 10}], '
+        '"comment": "200字以内的总评", '
+        '"suggestions": ["3-5 条具体可执行的改进建议"]}。'
+        "评分要严格按考官标准，不要一律打高分；comment 与 suggestions 必须结合考生原文，不要套话。"
+    ),
+    "interview": (
+        "你是公安联考面试考官（公安院校/移民管理方向）。有两种任务："
+        "① 若用户消息以【出题】开头：出一道贴近公安实战的面试题，严格只输出 JSON："
+        '{"question": "面试题"}。'
+        "② 若用户消息以【评分】开头：对考生作答按四维评分，严格只输出 JSON："
+        '{"content": 0-100, "expression": 0-100, "presence": 0-100, "logic": 0-100, '
+        '"comment": "150字以内点评，先肯定再指出最关键的1-2个问题"}。'
+        "严格只输出 JSON，不要输出其他文字。"
+    ),
+    "coach": (
+        "你是'联考小智'的AI学习教练。根据考生今日/近期学习数据，生成一句 40-70 字、具体可执行的今日学习建议"
+        "（提到科目与题型，不要空话套话）。严格只输出 JSON：{\"suggestion\": \"今日建议\"}。"
+        "不要输出 JSON 以外的任何文字。"
+    ),
 }
 
 DEFAULT_SYSTEM_PROMPT = SCENE_SYSTEM_PROMPTS["qa"]
@@ -79,6 +107,12 @@ class LLMClientError(Exception):
         super().__init__(message)
 
 
+def _chat_completions_url() -> str:
+    """把配置的基址规整成 chat/completions 完整地址（配基址或配全路径都能用）。"""
+    base_url = settings.LLM_API_URL.rstrip("/")
+    return base_url if base_url.endswith("/chat/completions") else base_url + "/chat/completions"
+
+
 async def _post(
     messages: List[Dict[str, str]],
     temperature: float,
@@ -91,8 +125,7 @@ async def _post(
     - 非 200、解析失败立即抛 LLMClientError（不重试，重试无意义）；
     - 日志不回显响应原文与请求内容。
     """
-    base_url = settings.LLM_API_URL.rstrip("/")
-    url = base_url if base_url.endswith("/chat/completions") else base_url + "/chat/completions"
+    url = _chat_completions_url()
     # 未配置密钥时必须在这里报明确的配置错误：此前会带着 "Bearer None" 打上游，
     # 上游回 401，用户只能看到「大模型返回错误（401）」，无法判断是配置缺失。
     api_key = (settings.LLM_API_KEY or "").strip()

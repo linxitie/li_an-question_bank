@@ -146,3 +146,46 @@ export function refreshReward(
 ): Promise<RewardListResult> {
   return fetchRewardList(query);
 }
+
+/** 我的兑换记录（M1.5：含卡密/待发货状态，供「我的兑换」页面） */
+export interface RewardExchangeItem {
+  id: number;
+  product_id: number | null;
+  product_name: string;
+  product_type: string | null;
+  coin_cost: number;
+  cash_cost: number;
+  status: 'completed' | 'pending' | 'refunded' | string;
+  status_text: string;
+  deliverable_type: string | null;
+  delivered_code: string | null;
+  delivered_at: string | null;
+  shipped_at: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export interface RewardExchangeListResult {
+  total: number;
+  page: number;
+  page_size: number;
+  items: RewardExchangeItem[];
+}
+
+export function fetchMyExchanges(
+  page = 1,
+  pageSize = 20
+): Promise<RewardExchangeListResult> {
+  return request<RewardExchangeListResult>({
+    url: '/api/shop/exchange/mine',
+    method: 'GET',
+    params: { page, page_size: pageSize }
+  });
+}
+
+/** 兑换结果扩展字段（M1.5：后端直接返回交付物） */
+export interface RewardExchangeDelivered extends RewardExchangeResult {
+  delivered_code?: string | null;
+  status?: string;
+}
+

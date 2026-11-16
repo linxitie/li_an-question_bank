@@ -21,6 +21,8 @@ from ....models.models import (
     SysUser, Task, UserTaskProgress, CoinRecord, DailyCheckin, PracticeRecord,
 )
 from ....services.growth_service import add_growth
+from ....services.coin_ledger import grant as grant_coins
+from ....services import weekly_tasks as weekly
 
 router = APIRouter(prefix="/api/tasks", tags=["任务中心"])
 logger = logging.getLogger(__name__)
@@ -48,7 +50,14 @@ def _period_key_for(task: Task) -> str:
 
 # ------------------------- 进度计算（calc） -------------------------
 
-def _calc_metric(user_id: int, metric: str, db: Session) -> float:
+def _calc_metric(user_id: int, metric: str, db: Session, param: Optional[int] = None) -> float:
+    # M2：周任务指标统一由 weekly_tasks 计算（按 ISO 周范围，数据源 exam 域）
+    if metric.startswith("week_"):
+        return weekly.compute_metric(metric, user_id, db)
+    # M3：个性化任务按知识点统计本周答题数
+    if metric == "kg_node_questions":
+        return weekly.compute_metric(metric, user_id, db, param=param)
+
     today_start = datetime.combine(date.today(), datetime.min.time())
     week_start = datetime.now() - timedelta(days=7)
 
@@ -89,8 +98,8 @@ def _calc_metric(user_id: int, metric: str, db: Session) -> float:
     return 0
 
 
-def _task_view(task: Task, user_id: int, db: Session) -> dict:
-    """任务展示结构（含实时进度与领取状态）"""
+def _task_view(task: Task, user_id: int, db: Session, pinned_slot: int = 0) -> dict:
+    """任务展示结构（含实时进度、状态机与生效奖励）"""
     period_key = _period_key_for(task)
     prog = db.query(UserTaskProgress).filter(
         UserTaskProgress.user_id == user_id,
@@ -98,21 +107,51 @@ def _task_view(task: Task, user_id: int, db: Session) -> dict:
         UserTaskProgress.period_key == period_key,
     ).first()
 
-    current = _calc_metric(user_id, task.metric, db)
+    current = _calc_metric(user_id, task.metric, db, task.metric_param)
     completed = current >= task.threshold
     claimed = bool(prog and prog.claimed == 1)
+    expired = bool(prog and prog.expired == 1)
+
+    # M2：周任务的生效奖励 = 基础值 × 难度 × 稀缺（置顶套 1.30/1.45/1.50）
+    is_weekly = task.t_type == "weekly"
+    scarcity = weekly.PINNED_SCARCITY.get(pinned_slot) if pinned_slot else None
+    reward = weekly.effective_reward(task, scarcity) if is_weekly else (task.reward_coins or 0)
+
+    if expired:
+        status = "expired"
+    elif claimed:
+        status = "claimed"
+    elif completed:
+        status = "pending"  # 待判定
+    elif current > 0:
+        status = "in_progress"
+    else:
+        status = "not_started"
 
     return {
         "task_id": task.task_id,
         "task_code": task.task_code,
         "title": task.title,
         "description": task.description,
+        "is_kg_generated": bool(
+            getattr(task, "personalized_for", None)
+            and str(task.metric or "").startswith("kg_")
+        ),
         "metric": task.metric,
         "threshold": task.threshold,
-        "reward_coins": task.reward_coins,
+        "reward_coins": reward,
+        "reward_base": task.reward_coins,
         "current": current,
         "completed": completed,
         "claimed": claimed,
+        "status": status,
+        # M2 周任务字段
+        "category": getattr(task, "category", None) or "A",
+        "pinned": bool(pinned_slot),
+        "pinned_slot": pinned_slot,
+        "difficulty_factor": float(task.difficulty_factor or 1.0),
+        "scarcity_factor": float(scarcity if scarcity is not None else (task.scarcity_factor or 1.0)),
+        "coupon_code": getattr(task, "coupon_code", None),
     }
 
 
@@ -169,6 +208,13 @@ async def overview(
     db: Session = Depends(get_db),
 ):
     """聚合返回签到状态 + 每日任务 + 随机任务 + 周常任务"""
+    # 2026-11-10：首页任务卡与任务中心都读这个接口，进来先把「已完成未领取」的金币补齐，
+    # 保证「已完成」的任务不需要再点领取（幂等，失败不影响列表展示）。
+    try:
+        _auto_claim_completed_tasks(current_user, db)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        logger.warning("任务自动发放失败: %s", exc)
     today = date.today().strftime("%Y-%m-%d")
 
     # 签到状态
@@ -193,9 +239,17 @@ async def overview(
         Task.t_type == "random",
     ).all() if random_task_ids else []
 
-    # 周常任务
-    weekly_tasks = db.query(Task).filter(Task.t_type == "weekly", Task.enabled == 1)\
-        .order_by(Task.sort_order.asc()).all()
+    # 周常任务（M2：按置顶槽位排序，置顶任务套稀缺系数；M3：附带本人个性化任务）
+    weekly.ensure_week_pool(db)
+    slots = weekly.pinned_slots(db)
+    weekly_tasks = db.query(Task).filter(
+        Task.t_type == "weekly",
+        Task.enabled == 1,
+        (Task.personalized_for.is_(None)) | (Task.personalized_for == current_user.user_id),
+    ).order_by(Task.sort_order.asc()).all()
+    weekly_views = [_task_view(t, current_user.user_id, db, slots.get(t.task_id, 0)) for t in weekly_tasks]
+    # 置顶在前，其余按原排序
+    weekly_views.sort(key=lambda v: (0 if v["pinned"] else 1, v["pinned_slot"] or 99, v["task_id"]))
 
     return {
         "checkin": {
@@ -205,7 +259,13 @@ async def overview(
         },
         "daily": [_task_view(t, current_user.user_id, db) for t in daily_tasks],
         "random": [_task_view(t, current_user.user_id, db) for t in random_tasks],
-        "weekly": [_task_view(t, current_user.user_id, db) for t in weekly_tasks],
+        "weekly": weekly_views,
+        "weekly_meta": {
+            "week_key": weekly.week_key(),
+            "pinned_count": len([s for s in slots.values() if s]),
+            "claimed_total": weekly.weekly_claimed_total(current_user.user_id, db),
+            "reward_cap": weekly.WEEKLY_REWARD_CAP,
+        },
     }
 
 
@@ -272,6 +332,79 @@ async def refresh_random(
     }
 
 
+def _auto_claim_completed_tasks(current_user: SysUser, db: Session) -> list:
+    """把「已完成但没领」的任务奖励补给用户（幂等）。返回本次发放条目。
+
+    完成瞬间的发放由行为事件链路负责（achievement_judge → task_reward.auto_claim）；
+    本函数覆盖功能上线前已完成的历史任务、以及事件链路没跑到的任务。
+    """
+    from ....services import task_reward
+
+    _ensure_random_tasks(current_user.user_id, db)
+    tasks = db.query(Task).filter(
+        Task.enabled == 1,
+        (Task.personalized_for.is_(None)) | (Task.personalized_for == current_user.user_id),
+    ).all()
+
+    now = datetime.now()
+    granted = []
+    for task in tasks:
+        period_key = _period_key_for(task)
+        prog = db.query(UserTaskProgress).filter(
+            UserTaskProgress.user_id == current_user.user_id,
+            UserTaskProgress.task_id == task.task_id,
+            UserTaskProgress.period_key == period_key,
+        ).first()
+        if prog is not None and (prog.claimed == 1 or prog.expired == 1):
+            continue
+
+        if (task.mode or "calc").lower() == "event":
+            if prog is None:
+                continue  # 事件任务没有进度行 = 没发生过对应行为
+            current = int(prog.current or 0)
+        else:
+            current = int(_calc_metric(current_user.user_id, task.metric, db, task.metric_param))
+
+        if current < int(task.threshold or 1):
+            continue
+        if prog is None:
+            prog = UserTaskProgress(
+                user_id=current_user.user_id, task_id=task.task_id,
+                period_key=period_key, current=0, completed=0, claimed=0,
+            )
+            db.add(prog)
+            db.flush()
+
+        prog.current = current
+        prog.completed = 1
+        if not prog.completed_at:
+            prog.completed_at = now
+        reward = task_reward.auto_claim(db, current_user, task, prog, now)
+        if reward > 0:
+            granted.append({
+                "task_id": task.task_id,
+                "title": task.title or task.description,
+                "reward_coins": reward,
+            })
+
+    db.commit()  # 没有发放时也要提交 _ensure_random_tasks 的懒分配
+    return granted
+
+
+@router.post("/auto-claim", summary="自动领取已完成任务的金币（幂等）")
+async def auto_claim_completed(
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """兜底发放：把「已完成但没领」的任务奖励一次性补给用户（页面可反复调用）。"""
+    granted = _auto_claim_completed_tasks(current_user, db)
+    return {
+        "granted": granted,
+        "total_coins": sum(item["reward_coins"] for item in granted),
+        "balance": current_user.total_coins,
+        "message": f"自动领取 {len(granted)} 项任务奖励" if granted else "暂无待发放的任务奖励",
+    }
+
 @router.post("/{task_id}/claim", summary="领取任务奖励")
 async def claim_task(
     task_id: int,
@@ -289,13 +422,15 @@ async def claim_task(
         UserTaskProgress.period_key == period_key,
     ).first()
 
-    # 实时进度校验
-    current = _calc_metric(current_user.user_id, task.metric, db)
+    # 实时进度校验（M2：周任务的指标从 exam 域按周聚合；M3：个性化任务按知识点）
+    current = _calc_metric(current_user.user_id, task.metric, db, task.metric_param)
     if current < task.threshold:
         raise HTTPException(status_code=400, detail="任务未完成")
 
     if prog and prog.claimed == 1:
         raise HTTPException(status_code=400, detail="奖励已领取")
+    if prog and prog.expired == 1:
+        raise HTTPException(status_code=400, detail="任务已失效")
 
     now = datetime.now()
     if not prog:
@@ -305,34 +440,66 @@ async def claim_task(
         )
         db.add(prog)
 
+    # 状态机：进行中 → 待判定 → 已发放
     prog.current = int(current)
+    prog.pending_verify = 1
     prog.completed = 1
+    prog.completed_at = now
+
+    # M2：周任务按「基础值 × 难度 × 稀缺」发放，并受单任务 500 / 每周 900 封顶
+    is_weekly = task.t_type == "weekly"
+    if is_weekly:
+        slot = weekly.pinned_slots(db).get(task.task_id, 0)
+        reward = weekly.claimable_amount(task, current_user.user_id, db, weekly.PINNED_SCARCITY.get(slot))
+        if reward <= 0:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="本周金币奖励已达上限（900）")
+    else:
+        reward = task.reward_coins or 0
+
     prog.claimed = 1
     prog.claimed_at = now
+    prog.pending_verify = 0
 
     source_type = "RANDOM_TASK" if task.t_type == "random" else "TASK"
 
-    # 发币
-    if task.reward_coins > 0:
-        current_user.total_coins = (current_user.total_coins or 0) + task.reward_coins
-        db.add(CoinRecord(
-            user_id=current_user.user_id,
-            coin_change=task.reward_coins,
-            current_balance=current_user.total_coins,
-            transaction_type="GAIN",
+    # 发币（2026-11-04 M1：统一走金币台账，确保生成批次以支持 12 个月到期清零）
+    if reward > 0:
+        grant_coins(
+            db,
+            current_user,
+            reward,
             source_type=source_type,
             related_id=task_id,
             description=f"完成任务：{task.title}",
-        ))
+        )
+
+    # M2：C 类场景任务完成时额外发券（把学习行为与兑换闭环）
+    granted_coupon = None
+    coupon_code = getattr(task, "coupon_code", None)
+    if is_weekly and coupon_code:
+        from ....api.v1.reward.coupons import grant_coupon
+
+        grant = grant_coupon(db, current_user, coupon_code, source="TASK")
+        if grant is not None:
+            granted_coupon = coupon_code
 
     if task.reward_growth and task.reward_growth > 0:
         add_growth(db, current_user, task.reward_growth)
 
     db.commit()
 
-    logger.info(f"用户 {current_user.user_id} 领取任务 {task.title}，奖励 {task.reward_coins} 金币")
+    logger.info(
+        "用户 %s 领取任务 %s，奖励 %s 金币（周任务=%s）",
+        current_user.user_id,
+        task.title,
+        reward,
+        is_weekly,
+    )
     return {
         "message": "领取成功",
-        "reward_coins": task.reward_coins,
+        "reward_coins": reward,
+        "reward_base": task.reward_coins,
+        "coupon_code": granted_coupon,
         "balance": current_user.total_coins,
     }

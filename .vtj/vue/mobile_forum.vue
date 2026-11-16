@@ -7,7 +7,9 @@
         <XIcon :icon="ArrowLeft" :size="22" color="#1A365D" class="nav-back" @click="goBack"></XIcon>
       </div>
       <h1 class="nav-title">学习论坛</h1>
-      <div class="nav-right"></div>
+      <div class="nav-right">
+        <button class="m-feedback-btn" @click="showFeedback = true">反馈</button>
+      </div>
     </header>
 
     <!-- 固定工具条：全部 / 今日热门 / 我的帖子 + 五角星 + 搜索筛选 -->
@@ -19,7 +21,7 @@
           :class="['cat-tab', { active: activeCategory === tab.key }]"
           @click="selectTab(tab.key)"
         >
-          {{ tab.name }}
+          {{ tab.key === 'hot' && hotRange === 'week' ? '今日热门 · 近 7 天' : tab.name }}
         </div>
         <button class="nav-fav-btn" title="我的收藏/喜欢" @click="openFav('favorites')">⭐</button>
       </div>
@@ -102,7 +104,9 @@
                 {{ post.likes }}
               </span>
               <span class="stat-item" @click.stop="toggleFavorite(post)">
-                <XIcon :icon="Star" :size="16" :color="post.favorited ? '#f59e0b' : '#8899aa'"></XIcon>
+                <span class="star-ico" :class="{ on: post.favorited }">
+                  <XIcon :icon="Star" :size="16" :color="post.favorited ? '#f59e0b' : '#8899aa'"></XIcon>
+                </span>
                 {{ post.favoriteCount || 0 }}
               </span>
             </div>
@@ -126,6 +130,23 @@
     </div>
 
     <!-- 底部Tab栏：统一使用单一真源组件 src/components/MobileTabBar.vue -->
+    <div v-if="showFeedback" class="m-fb-mask" @click.self="showFeedback = false">
+      <div class="m-fb-card">
+        <div class="m-fb-head">
+          <h3>问题反馈</h3>
+          <button class="m-fb-close" @click="showFeedback = false">×</button>
+        </div>
+        <textarea v-model="feedbackText" rows="5" maxlength="1000" placeholder="请描述你遇到的问题或建议…"></textarea>
+        <label class="m-fb-anon"><input type="checkbox" v-model="feedbackAnonymous" /> 匿名提交（管理员端显示「匿名」）</label>
+        <div class="m-fb-actions">
+          <button class="m-fb-cancel" @click="showFeedback = false">取消</button>
+          <button class="m-fb-submit" :disabled="feedbackSubmitting || !feedbackText.trim()" @click="submitFeedback">
+            {{ feedbackSubmitting ? '提交中…' : '提交' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <MobileTabBar active="forum" />
   </div>
 
@@ -154,7 +175,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed, onMounted } from 'vue';
+import { defineComponent, ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
@@ -199,10 +220,16 @@ export default defineComponent({
 
     // 分类标签
     const activeCategory = ref('all');
+    /** 今日热门的数据范围：day 当天 / week 回退近 7 天 / none 无数据（2026-11-03 第 2 轮） */
+    const hotRange = ref<'day' | 'week' | 'none'>('day');
     const searchKeyword = ref('');
     const searchCollapsed = ref(false);
     const searchDateFrom = ref('');
     const searchDateTo = ref('');
+    const showFeedback = ref(false);
+    const feedbackText = ref('');
+    const feedbackAnonymous = ref(false);
+    const feedbackSubmitting = ref(false);
     // key 必须与后端 forum_post.share_type 枚举一致
     // 2026-10-31：取消原分类，改为 全部 / 今日热门 / 我的帖子
     const tabs = ref([
@@ -215,20 +242,22 @@ export default defineComponent({
     const posts = ref<any[]>([]);
     
     // 过滤帖子
-    const filteredPosts = computed(() => {
-      if (activeCategory.value === 'all') {
-        return posts.value;
-      }
-      return posts.value.filter(p => p.category === activeCategory.value);
-    });
+    // 2026-11-03：页签已改为「全部 / 今日热门 / 我的帖子」，列表集合完全由接口决定
+    // （loadPosts 已按 hot/mine 分别请求），前端不得再按旧的 shareType 分类二次过滤，
+    // 否则 hot/mine 恒为空（p.category 永远不等于 'hot'/'mine'）。
+    const filteredPosts = computed(() => posts.value);
     
     // 加载真实帖子数据；分类由服务端 share_type 过滤，避免只筛当前页
     /** 应用搜索（关键词 + 日期） */
-    const applySearch = () => { loadPosts(activeCategory.value); };
+    const applySearch = () => {
+      clearScroll();
+      loadPosts(activeCategory.value);
+    };
     const resetSearch = () => {
       searchKeyword.value = '';
       searchDateFrom.value = '';
       searchDateTo.value = '';
+      clearScroll();
       loadPosts(activeCategory.value);
     };
 
@@ -244,7 +273,7 @@ export default defineComponent({
           params.set('date_from', today);
           params.set('date_to', today);
         } else if (categoryKey === 'mine') {
-          params.set('only_mine', '1');
+          // my-posts 只返回本人帖子，不接受 only_mine 参数（旧代码传了无效参数，已删除）
         }
         if (searchKeyword.value.trim()) params.set('keyword', searchKeyword.value.trim());
         if (searchDateFrom.value) params.set('date_from', searchDateFrom.value);
@@ -255,8 +284,34 @@ export default defineComponent({
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        let rawPosts: any[] = data.posts || [];
+
+        // 今日热门回退（2026-11-03 第 2 轮）：当天一条都没有时，自动改看近 7 天，
+        // 与电脑/平板端「近 7 天」口径一致，并在页签上注明，避免误以为是当天数据。
+        if (categoryKey === 'hot') {
+          if (rawPosts.length > 0) {
+            hotRange.value = 'day';
+          } else {
+            const weekAgo = new Date(Date.now() - 6 * 24 * 3600 * 1000)
+              .toISOString()
+              .slice(0, 10);
+            params.set('date_from', weekAgo);
+            params.set('date_to', today);
+            // 回退不再叠加用户手选的日期，否则两个区间会互相覆盖
+            params.delete('keyword');
+            const resWeek = await fetch(`${endpoint}?${params.toString()}`, {
+              headers: auth && auth.getAuthHeaders ? auth.getAuthHeaders() : {}
+            });
+            if (resWeek.ok) {
+              const dataWeek = await resWeek.json();
+              rawPosts = dataWeek.posts || [];
+            }
+            hotRange.value = rawPosts.length > 0 ? 'week' : 'none';
+          }
+        }
+
         const IMAGE_PATTERN = /\.(png|jpe?g|gif|webp)(\?.*)?$/i;
-        posts.value = (data.posts || []).map((p: any) => {
+        posts.value = rawPosts.map((p: any) => {
           const t = new Date(p.createTime).getTime();
           const diff = Date.now() - t;
           const min = Math.floor(diff / 60000);
@@ -270,7 +325,9 @@ export default defineComponent({
             id: p.id,
             title: p.title,
             titleColor: p.titleColor || 'default',
-            excerpt: p.content || '',
+            // 2026-11-04 v5：列表摘要必须是纯文本——富文本帖的 content 是 HTML，
+            // 直接塞进 ForumContent（TEXT 模式）会把标签当正文显示出来。
+            excerpt: String(p.content || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
             author: (p.user && p.user.nickname) || '匿名',
             time,
             avatar: (p.user && p.user.avatar) || '',
@@ -291,6 +348,8 @@ export default defineComponent({
               .filter((url: string) => IMAGE_PATTERN.test(url))
           };
         });
+        // v5：从详情返回时列表是重新加载的，这里把之前记录的滚动位置还原回去
+        await restoreScroll();
       } catch (error) {
         console.error('加载帖子失败:', error);
         posts.value = [];
@@ -310,6 +369,7 @@ export default defineComponent({
     const selectTab = async (key: string) => {
       if (activeCategory.value === key) return;
       activeCategory.value = key;
+      clearScroll();
       await loadPosts(key);
     };
     
@@ -353,7 +413,82 @@ export default defineComponent({
       router.push('/mobile/forum/create');
     };
     
+    /** 列表滚动容器（本页自己的滚动区，不是 window） */
+    const SCROLL_KEY = 'mobile-forum-scroll';
+    const scrollEl = () =>
+      document.querySelector('.mobile-forum-page .main-content') as HTMLElement | null;
+
+    /** 进详情前保存滚动位置，供返回后还原 */
+    const saveScroll = () => {
+      const el = scrollEl();
+      if (!el) return;
+      try {
+        sessionStorage.setItem(SCROLL_KEY, String(el.scrollTop || 0));
+      } catch {
+        /* 隐私模式下 sessionStorage 可能不可用，忽略即可 */
+      }
+    };
+
+    /** 列表渲染完成后还原滚动位置；没有记录则不动 */
+    const restoreScroll = async () => {
+      let raw: string | null = null;
+      try {
+        raw = sessionStorage.getItem(SCROLL_KEY);
+      } catch {
+        return;
+      }
+      if (!raw) return;
+      await nextTick();
+      const el = scrollEl();
+      if (el) {
+        el.scrollTop = Number(raw) || 0;
+      }
+    };
+
+    /** 切页签/搜索时清掉记录，避免恢复到「上一次筛选」的位置 */
+    const clearScroll = () => {
+      try {
+        sessionStorage.removeItem(SCROLL_KEY);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const submitFeedback = async () => {
+      const content = feedbackText.value.trim();
+      if (!content) return;
+      feedbackSubmitting.value = true;
+      try {
+        const auth = (window as any).__VTJ_AUTH__;
+        const res = await auth.apiFetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content,
+            category: '其他',
+            source: 'mobile_forum',
+            is_anonymous: feedbackAnonymous.value ? 1 : 0
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showFeedback.value = false;
+          feedbackText.value = '';
+          feedbackAnonymous.value = false;
+          alert('反馈已提交：' + (data.ticket_no || ''));
+        } else {
+          alert(data.detail || '提交失败');
+        }
+      } catch (e) {
+        alert('提交失败');
+      } finally {
+        feedbackSubmitting.value = false;
+      }
+    };
+
     const viewPost = (post: any) => {
+      // 2026-11-04 v5：进详情前记住列表滚动位置，返回后能接着看（此前会跳回顶部）
+      saveScroll();
       router.push(`/mobile/forum/${post.id}`);
     };
 
@@ -365,6 +500,7 @@ export default defineComponent({
       filteredPosts,
       goBack,
       selectTab,
+      hotRange,
       searchKeyword,
       searchDateFrom,
       searchDateTo,
@@ -381,6 +517,13 @@ export default defineComponent({
       toggleLike,
       toggleFavorite,
       viewPost,
+      // 收藏弹窗里用的是 goToDetail，之前没有定义 → 点了没反应（v5 修正）
+      goToDetail: viewPost,
+      showFeedback,
+      feedbackText,
+      feedbackAnonymous,
+      feedbackSubmitting,
+      submitFeedback,
       onAvatarError,
       ArrowLeft,
       Plus,
@@ -738,4 +881,23 @@ export default defineComponent({
 .main-content { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
 .m-collapse-row { display: flex; justify-content: center; padding: 2px 0 0; }
 .m-collapse-arrow { font-size: 16px; color: #94a3b8; line-height: 1; cursor: pointer; }
+/* 2026-11-09：手机论坛点赞/收藏动效 */
+@keyframes mf-icon-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  70% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+.heart-ico.on, .star-ico.on { display: inline-block; animation: mf-icon-pop 0.45s ease; }
+.m-feedback-btn { border: 1px solid #dfe3ee; background: #fff; color: #1a365d; border-radius: 999px; padding: 4px 12px; font-size: 12px; }
+.m-fb-mask { position: fixed; inset: 0; z-index: 3000; background: rgba(12,26,44,.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.m-fb-card { width: 100%; max-width: 420px; background: #fff; border-radius: 14px; padding: 16px; }
+.m-fb-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.m-fb-head h3 { margin: 0; font-size: 16px; color: #1a2b5f; }
+.m-fb-close { border: 0; background: transparent; font-size: 22px; color: #8a8faa; }
+.m-fb-card textarea { width: 100%; box-sizing: border-box; border: 1px solid #dfe3ee; border-radius: 10px; padding: 10px 12px; font-size: 14px; resize: vertical; font-family: inherit; }
+.m-fb-anon { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; font-size: 12px; color: #5a6488; }
+.m-fb-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.m-fb-cancel { border: 1px solid #dfe3ee; background: #fff; border-radius: 8px; padding: 7px 16px; }
+.m-fb-submit { border: none; background: #c41e3a; color: #fff; border-radius: 8px; padding: 7px 18px; }
 </style>

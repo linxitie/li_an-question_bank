@@ -240,6 +240,16 @@ def _apply_task_progress(
         if progress.current >= threshold and not progress.completed:
             progress.completed = 1
             progress.completed_at = datetime.now()
+            # 2026-11-10：完成任务即自动发金币，学生不必再去「商城-任务」点领取。
+            # 幂等由 progress.claimed 保证；发奖失败不阻断进度写入。
+            try:
+                from .task_reward import auto_claim
+
+                user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
+                if user is not None:
+                    auto_claim(db, user, task, progress)
+            except Exception as exc:  # noqa: BLE001 — 发奖异常不得回滚任务进度
+                logger.warning("任务 %s 自动发奖失败: %s", task.task_id, exc)
 
         if changed:
             updates.append(

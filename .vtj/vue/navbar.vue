@@ -77,21 +77,22 @@
     },
     computed: {
       menuItems() {
+        // 团队约定（2026-11-15）：导航只保留这五项，其余入口不往这里加
         return [
           { id: 'home_page', label: '首页' },
           { id: 'question_bank', label: '题库' },
-          { id: 'news', label: '新闻' },
-          { id: 'about', label: '关于砺安题库' },
-          { id: 'forum', label: '论坛' }
+          { id: 'gold_purchase', label: '商城' },
+          { id: 'forum', label: '论坛' },
+          { id: 'about', label: '关于砺安题库' }
         ];
       }
     },
     mounted() {
       this.updateLoginState();
       // 2026-11-11 修（用户反馈）：小红线与浅色块永远停在「首页」。
-      // 原因：`state.activeMenu` 只在点击时改，而每个页面各自内嵌一份 NavBar ——
+      // 原因：state.activeMenu 只在点击时改，而每个页面各自内嵌一份 NavBar ——
       // 换页后组件重新挂载，state 回到初始值 'home_page'。
-      // 现在改为**以当前路由为准**：进入任何页面/浏览器地址栏直达，高亮都落在对应菜单。
+      // 现在改为以当前路由为准：进入任何页面/地址栏直达，高亮都落在对应菜单。
       this.syncActiveFromRoute();
     },
     watch: {
@@ -101,27 +102,28 @@
       }
     },
     methods: {
-      navigateTo(id) {
-        if (this.$router) {
-          this.$router.push(id === 'news' ? '/news' : '/page/' + id);
-        }
-      },
       /** 路由 → 菜单 id（只在这里定义一次，点击与直达共用）；菜单里没有的页面返回 ''（不高亮） */
       menuIdFromRoute(path) {
         const p = String(path || '').split('?')[0].split('#').pop() || '/';
         // `/home` 是 HomePage 的别名（与 `/page/home_page` 同一个组件），两个都算首页
         if (p === '/' || p === '' || p === '/home' || p === '/page/home_page') return 'home_page';
         if (p.indexOf('/page/question_bank') === 0) return 'question_bank';
-        if (p === '/news' || p.indexOf('/news/') === 0) return 'news';
-        if (p.indexOf('/page/about') === 0) return 'about';
+        if (p.indexOf('/page/gold_purchase') === 0) return 'gold_purchase';
         if (p === '/forum' || p.indexOf('/forum/') === 0 || p.indexOf('/page/forum') === 0) return 'forum';
-        // 不在菜单里的页面（下载客户端/答题/收藏…）不高亮任何一项，避免"停在首页"的错觉
+        if (p.indexOf('/page/about') === 0) return 'about';
+        // 不在菜单里的页面（下载客户端/答题/收藏/我的…）不高亮任何一项，避免"停在首页"的错觉
         return '';
       },
       /** 让高亮跟着路由走（挂载时 + 路由变化时各调一次） */
       syncActiveFromRoute() {
         const path = (this.$route && this.$route.path) || '';
         this.state.activeMenu = this.menuIdFromRoute(path);
+      },
+      navigateTo(id) {
+        if (!this.$router) return;
+        // 走前缀 /page/ 的是 VTJ 设计器页；小智 Studio 是中国手写页，单独路由
+        if (id === 'ai_studio') { this.$router.push('/ai-studio'); return; }
+        this.$router.push(id === 'news' ? '/news' : '/page/' + id);
       },
       handleMenuClick(id) {
         // 先给即时反馈，路由切换后 `syncActiveFromRoute` 会再对齐一次（两边同口径）

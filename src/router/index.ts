@@ -7,6 +7,7 @@ import {
   type RouteRecordRaw
 } from 'vue-router';
 import { detectDevice, resolveDevicePath } from '@/utils/device';
+import { reloadForChunkError } from '@/utils/chunkRecovery';
 import { canAccess } from './access';
 
 const routes: RouteRecordRaw[] = [
@@ -34,6 +35,12 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/recruitment/radar',
+    name: 'RecruitmentRadar',
+    component: () => import('@/views/student/shared/recruitment_radar.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/unauthorized',
     name: 'Unauthorized',
     component: () => import('@/views/system/shared/unauthorized.vue')
@@ -53,9 +60,37 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    path: '/daily-news',
+    name: 'DailyNews',
+    component: () => import('@/views/student/shared/daily_news.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/quotes',
+    name: 'QuotesBrowser',
+    component: () => import('@/views/student/shared/quotes_browser.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/quotes/favorites',
+    name: 'QuoteFavorites',
+    component: () => import('@/views/student/shared/quote_favorites.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/favorites',
+    redirect: '/news/favorites'
+  },
+  {
     path: '/news',
     name: 'NewsTimeline',
     component: () => import('@/views/student/shared/news_timeline.vue'),
+    meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    path: '/news/favorites',
+    name: 'NewsFavorites',
+    component: () => import('@/views/student/shared/news_favorites.vue'),
     meta: { platform: 'pc', roles: ['student', 'teacher', 'admin'] }
   },
   {
@@ -100,6 +135,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/ai_chat.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
+  // 联考小智工作台：流式对话 + 工具调用执行（新增页，旧 ai_chat 保留）
+  {
+    path: '/ai-studio',
+    name: 'AiStudio',
+    component: () => import('@/views/student/pc/ai_studio.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
   {
     path: '/study-plan',
     name: 'StudyPlan',
@@ -118,6 +160,14 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/knowledge_view.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
+  // 错题集（PC）：页面一直存在但此前没有注册路由，属孤儿页；
+  // 遗忘曲线复习提醒卡（DueReviewCard）挂在该页，必须可达。
+  {
+    path: '/wrong-questions',
+    name: 'WrongQuestions',
+    component: () => import('$vtj/vue/wrong_questions.vue'),
+    meta: { roles: ['student'] }
+  },
   {
     path: '/memories',
     name: 'MemoriesView',
@@ -129,6 +179,20 @@ const routes: RouteRecordRaw[] = [
     name: 'StudentPapers',
     component: () => import('$vtj/vue/student_papers.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    // M3.5（2026-11-05）：我的知识图谱（手写页，不改 .vtj 模板）
+    path: '/student/knowledge/graph',
+    name: 'StudentKnowledgeGraph',
+    component: () => import('@/views/student/pc/knowledge_graph.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'], title: '我的知识图谱' }
+  },
+  {
+    // 金币购 M1.5（2026-11-05）：我的兑换（手写页，放在 src/views，不改 .vtj 模板）
+    path: '/student/shop/exchanges',
+    name: 'StudentShopExchanges',
+    component: () => import('@/views/student/pc/shop_exchanges.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'], title: '我的兑换' }
   },
   {
     path: '/paper-answer',
@@ -265,6 +329,13 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: ['admin'] }
       },
       {
+        // 2026-11-05：金币商城挂到 AdminLayout 下，保证左侧导航常驻
+        path: 'shop',
+        name: 'AdminShop',
+        component: () => import('$vtj/vue/admin_shop.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
         path: 'settings',
         name: 'AdminSettings',
         component: () => import('$vtj/vue/admin_settings.vue'),
@@ -310,6 +381,12 @@ const routes: RouteRecordRaw[] = [
         redirect: '/admin/materials?type=paper'
       },
       {
+        path: 'quotes',
+        name: 'AdminQuotes',
+        component: () => import('@/views/admin/quotes_review.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
         path: 'profile',
         name: 'AdminProfile',
         component: () => import('$vtj/vue/admin_profile.vue'),
@@ -331,6 +408,12 @@ const routes: RouteRecordRaw[] = [
         path: 'forum',
         name: 'AdminForum',
         component: () => import('@/views/admin/admin_forum.vue'),
+        meta: { roles: ['admin'] }
+      },
+      {
+        path: 'feedback',
+        name: 'AdminFeedback',
+        component: () => import('@/views/admin/admin_feedback.vue'),
         meta: { roles: ['admin'] }
       },
       {
@@ -393,6 +476,37 @@ const routes: RouteRecordRaw[] = [
     component: () => import('$vtj/vue/tablet_login.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
+  // ---- 模块4/7 补齐：平板端复用同一组件（R12）----
+  {
+    path: '/tablet/profile-quiz',
+    name: 'TabletProfileQuiz',
+    component: () => import('$vtj/vue/profile_quiz.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/study-plan',
+    name: 'TabletStudyPlan',
+    component: () => import('$vtj/vue/study_plan.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/ai-assistant',
+    name: 'TabletAiAssistant',
+    component: () => import('$vtj/vue/ai_chat.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/signin',
+    name: 'TabletSignin',
+    component: () => import('$vtj/vue/signin_card.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/knowledge-graph',
+    name: 'TabletKnowledgeGraph',
+    component: () => import('@/views/student/pc/knowledge_graph.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
   {
     // 2026-11-02：平板与电脑使用同一套页面（你的要求），首页直接复用电脑首页组件。
     // 注意：不能 redirect 到 /home —— device.ts（R4 原样保留）会把平板访问的 /home 映射回
@@ -434,6 +548,12 @@ const routes: RouteRecordRaw[] = [
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
+    path: '/tablet/news/favorites',
+    name: 'TabletNewsFavorites',
+    component: () => import('@/views/student/shared/news_favorites.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
     path: '/tablet/news/timeline',
     name: 'TabletNewsTimeline',
     component: () => import('@/views/student/shared/news_timeline.vue'),
@@ -443,6 +563,18 @@ const routes: RouteRecordRaw[] = [
     path: '/tablet/news/:id',
     name: 'TabletNewsDetail',
     component: () => import('@/views/student/mobile/mobile_news.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/quotes',
+    name: 'TabletQuotes',
+    component: () => import('@/views/student/shared/quotes_browser.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/quotes/favorites',
+    name: 'TabletQuoteFavorites',
+    component: () => import('@/views/student/shared/quote_favorites.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
@@ -474,6 +606,12 @@ const routes: RouteRecordRaw[] = [
     path: '/tablet/recruit',
     name: 'TabletRecruitment',
     component: () => import('@/views/student/mobile/mobile_recruitment.vue'),
+    meta: { platform: 'tablet', roles: ['student'] }
+  },
+  {
+    path: '/tablet/recruitment/radar',
+    name: 'TabletRecruitmentRadar',
+    component: () => import('@/views/student/shared/recruitment_radar.vue'),
     meta: { platform: 'tablet', roles: ['student'] }
   },
   {
@@ -544,10 +682,53 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/student/mobile/mobile_scan.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
+  // ---- 模块4/7 补齐：手机端复用 PC 页面（R12：不复制页面，靠 platform 区分）----
+  {
+    path: '/mobile/profile-quiz',
+    name: 'MobileProfileQuiz',
+    component: () => import('$vtj/vue/profile_quiz.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/study-plan',
+    name: 'MobileStudyPlan',
+    component: () => import('$vtj/vue/study_plan.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/ai-assistant',
+    name: 'MobileAiAssistant',
+    component: () => import('$vtj/vue/ai_chat.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/signin',
+    name: 'MobileSignin',
+    component: () => import('$vtj/vue/signin_card.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/knowledge-graph',
+    name: 'MobileKnowledgeGraph',
+    component: () => import('@/views/student/pc/knowledge_graph.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
   {
     path: '/mobile/news',
     name: 'MobileNews',
     component: () => import('@/views/student/mobile/mobile_news.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/quotes',
+    name: 'MobileQuotes',
+    component: () => import('@/views/student/shared/quotes_browser.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/quotes/favorites',
+    name: 'MobileQuoteFavorites',
+    component: () => import('@/views/student/shared/quote_favorites.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {
@@ -603,6 +784,13 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/recruit',
     name: 'MobileRecruitment',
     component: () => import('@/views/student/mobile/mobile_recruitment.vue'),
+    meta: { platform: 'mobile', roles: ['student'] }
+  },
+  {
+    path: '/mobile/recruitment/radar',
+    name: 'MobileRecruitmentRadar',
+    component: () =>
+      import('@/views/student/mobile/mobile_recruitment_radar.vue'),
     meta: { platform: 'mobile', roles: ['student'] }
   },
   {
@@ -722,9 +910,53 @@ const router = createRouter({
   routes
 });
 
+// 2026-11-14：懒加载模块失败（dev server 重启/浏览器缓存损坏）时自动重载一次，
+// 避免停在「模块加载失败」页面反复手动刷新。
+router.onError((error) => {
+  if (reloadForChunkError()) return;
+  console.error('[router] 页面模块加载失败:', error);
+});
+
 // ==================== 路由守卫 — 三端权限控制 ====================
+/**
+ * 内容模块的 PC → 移动/平板路由映射。
+ *
+ * `resolveDevicePath()`（R4 文件）只覆盖首页/登录/题库等旧路由，不能修改；
+ * 新闻、金句、招考是后加模块，必须在这里补齐，否则手机访问 /news 会渲染 PC 的
+ * news_timeline.vue，而不是 /mobile/news 的 mobile_news.vue。
+ */
+function resolveContentDevicePath(
+  path: string,
+  device: 'mobile' | 'tablet'
+): string | null {
+  const prefix = device === 'tablet' ? '/tablet' : '/mobile';
+  const exact: Record<string, string> = {
+    '/news': `${prefix}/news`,
+    '/news/favorites':
+      device === 'tablet' ? '/tablet/news/favorites' : '/mobile/favorites',
+    '/quotes': `${prefix}/quotes`,
+    '/quotes/favorites': `${prefix}/quotes/favorites`,
+    '/recruit': `${prefix}/recruit`,
+    '/recruitment/radar': `${prefix}/recruitment/radar`,
+    '/favorites':
+      device === 'tablet' ? '/tablet/favorites' : '/mobile/favorites'
+  };
+  if (exact[path]) return exact[path];
+  if (path.startsWith('/news/') && path !== '/news/favorites') {
+    return `${prefix}/news/${path.slice('/news/'.length)}`;
+  }
+  return null;
+}
+
 router.beforeEach((to, _from, next) => {
-  const device = detectDevice();
+  const detected = detectDevice();
+  // 兼容手机浏览器的“桌面模式”/旧 WebView：UA 被判为 pc 时，仍按视口宽度回到移动布局
+  const device: 'pc' | 'mobile' | 'tablet' =
+    detected === 'pc' && window.innerWidth <= 1024
+      ? window.innerWidth >= 768
+        ? 'tablet'
+        : 'mobile'
+      : detected;
 
   // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再验角色
   //    - 未登录：只放行各端登录页，其余跳转到对应端登录页并带 redirect
@@ -732,14 +964,18 @@ router.beforeEach((to, _from, next) => {
   //    - 教师/管理员：跳 /unauthorized
   if (to.path.startsWith('/tablet') || to.path.startsWith('/mobile')) {
     const auth = (window as any).__VTJ_AUTH__;
-    const logged = auth && typeof auth.isLoggedIn === 'function'
-      ? !!auth.isLoggedIn()
-      : false;
-    const isLoginPage = /^\/(tablet|mobile)\/login\/?$/.test(to.path)
-      || to.path === '/unauthorized';
+    const logged =
+      auth && typeof auth.isLoggedIn === 'function'
+        ? !!auth.isLoggedIn()
+        : false;
+    const isLoginPage =
+      /^\/(tablet|mobile)\/login\/?$/.test(to.path) ||
+      to.path === '/unauthorized';
     if (!logged) {
       if (isLoginPage) return next();
-      const loginPath = to.path.startsWith('/tablet') ? '/tablet/login' : '/mobile/login';
+      const loginPath = to.path.startsWith('/tablet')
+        ? '/tablet/login'
+        : '/mobile/login';
       return next({ path: loginPath, query: { redirect: to.fullPath } });
     }
     const role = auth ? auth.getUserRole() : null;
@@ -755,11 +991,13 @@ router.beforeEach((to, _from, next) => {
     return next();
   }
 
-  // 2) 仅「手机」访问 PC 路径 → 映射到手机端
-  //    2026-10-26 用户决定：平板与电脑端使用同一套页面，因此平板不再自动跳 /tablet/*
-  //    （平板版仍可通过显式 URL 访问，如 /#/tablet/login、/#/tablet/forum/4）
-  //    保留原「登录页也区分设备」的行为：手机访问 /login 仍映射到 /mobile/login
-  if (device === 'mobile') {
+  // 2) 手机/平板访问内容模块的 PC 路径 → 映射到对应端
+  //    旧 resolveDevicePath 仅覆盖旧路由；新闻/金句/招考在此补齐。
+  if (device === 'mobile' || device === 'tablet') {
+    const mapped = resolveContentDevicePath(to.path, device);
+    if (mapped) {
+      return next({ path: mapped, replace: true });
+    }
     const target = resolveDevicePath(to.path, device);
     if (target) {
       return next({ path: target, replace: true });
@@ -778,7 +1016,11 @@ router.beforeEach((to, _from, next) => {
     return next();
   }
 
-  if (to.path === '/login' || to.path === '/unauthorized' || to.path === '/forum') {
+  if (
+    to.path === '/login' ||
+    to.path === '/unauthorized' ||
+    to.path === '/forum'
+  ) {
     return next();
   }
 

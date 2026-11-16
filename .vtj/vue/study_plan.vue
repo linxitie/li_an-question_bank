@@ -1,6 +1,9 @@
 <!-- 学习计划智能推荐 - 模块4 全面改造版 -->
 <template>
   <div class="plan-page">
+    <!-- 顶部导航：与首页同一套导航，保证各页观感一致 -->
+    <NavBar />
+
     <!-- 顶部渐变横幅 -->
     <div class="hero">
       <div class="hero-bg"></div>
@@ -45,6 +48,11 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- 画像问卷内嵌（模块7）：放在正文第一步，答完自动回填表单 -->
+    <div v-if="state.showQuiz" class="page-pad">
+      <ProfileQuizInline @done="onQuizDone" @skip="skipQuiz" />
     </div>
 
     <div class="plan-body">
@@ -446,6 +454,58 @@
           </div>
         </div>
 
+        <!-- 学习报告（周/月） -->
+        <div v-if="state.plan" class="report-card">
+          <div class="report-head">
+            <span class="section-title">📈 学习报告</span>
+            <div class="report-tabs">
+              <div class="report-tab" :class="{ active: state.report.period === 'week' }" @click="setReportPeriod('week')">本周</div>
+              <div class="report-tab" :class="{ active: state.report.period === 'month' }" @click="setReportPeriod('month')">本月</div>
+            </div>
+          </div>
+
+          <div class="report-grid">
+            <div class="report-item">
+              <div class="report-num">{{ rpt.minutes }}</div>
+              <div class="report-label">学习时长(分)</div>
+            </div>
+            <div class="report-item">
+              <div class="report-num">{{ rpt.questions }}</div>
+              <div class="report-label">完成题量</div>
+            </div>
+            <div class="report-item">
+              <div class="report-num">{{ rpt.accuracy }}%</div>
+              <div class="report-label">平均正确率</div>
+            </div>
+            <div class="report-item">
+              <div class="report-num">🔥 {{ rpt.streak }}</div>
+              <div class="report-label">连续打卡</div>
+            </div>
+          </div>
+
+          <div class="report-trend">
+            <div class="report-trend-title">正确率趋势</div>
+            <div class="report-bars">
+              <div v-for="(v, i) in rpt.trend" :key="i" class="report-bar-col">
+                <div class="report-bar" :style="{ height: v + '%' }"></div>
+                <div class="report-bar-label">{{ rpt.labels[i] }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="report-weak">
+            <div class="report-weak-title">薄弱科目 Top3</div>
+            <div v-for="w in rpt.weak" :key="w.name" class="report-weak-row">
+              <span class="report-weak-name">{{ w.name }}</span>
+              <div class="report-weak-bar"><div class="report-weak-fill" :style="{ width: w.rate + '%' }"></div></div>
+              <span class="report-weak-rate">{{ w.rate }}%</span>
+            </div>
+          </div>
+
+          <div class="report-comment">💬 {{ rpt.comment }}</div>
+          <button class="report-print-btn" @click="printReport">🖨️ 导出 / 打印报告</button>
+        </div>
+
         <!-- AI 提示 -->
         <div v-if="state.plan.tips" class="tips-card">
           <div class="tips-icon">💡</div>
@@ -476,15 +536,19 @@
 
 <script lang="ts">
   // @ts-nocheck
-  import { defineComponent, reactive, onMounted } from 'vue';
+  import { defineComponent, reactive, onMounted, computed } from 'vue';
+  import ProfileQuizInline from '@/components/plan/ProfileQuizInline.vue';
+  import NavBar from './navbar.vue';
 
   export default defineComponent({
     name: 'StudyPlan',
+    components: { ProfileQuizInline, NavBar },
     setup() {
       const state = reactive({
         loading: false,
         error: '',
         plan: null,
+        showQuiz: false,      // 画像问卷内嵌在学习计划里（未完成画像时展开）
         today: null,
         daysLeft: 0,
         streak: 0,
@@ -521,6 +585,11 @@
           topic: '',
           content: '',
           result: null,
+          grading: false,
+        },
+        // 学习报告（周/月，前端模拟汇总）
+        report: {
+          period: 'week',
         },
       });
 
@@ -705,14 +774,53 @@
         return Math.round((done / slots.length) * 100);
       }
 
-      // AI作文批改
-      function gradeEssay() {
-        if (!state.essay.content.trim()) {
-          alert('请先输入作文内容！');
-          return;
+      // AI作文批改（真 LLM：/api/llm/chat 一次性任务，scene=essay；失败回退示例评分）
+      function buildEssayPrompt() {
+        return [
+          '【任务】申论作文批改',
+          '作文题目：' + (state.essay.topic.trim() || '（未填写题目）'),
+          '作文正文：',
+          state.essay.content.trim(),
+        ].join('\n');
+      }
+
+      function parseAiJson(text) {
+        if (!text) return null;
+        let s = String(text).trim();
+        s = s.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+        const start = s.indexOf('{');
+        const end = s.lastIndexOf('}');
+        if (start >= 0 && end > start) s = s.slice(start, end + 1);
+        try {
+          return JSON.parse(s);
+        } catch (e) {
+          return null;
         }
-        // 模拟AI批改结果
-        state.essay.result = {
+      }
+
+      function normalizeEssayResult(raw) {
+        const colors = { '立意': '#4caf50', '结构': '#ff9800', '内容': '#2196f3', '语言': '#9c27b0', '卷面': '#607d8b' };
+        const dims = Array.isArray(raw.dimensions) ? raw.dimensions : [];
+        const dimensions = dims.map((d) => ({
+          name: String(d.name || ''),
+          score: Number(d.score) || 0,
+          max: Number(d.max) || 0,
+          color: colors[String(d.name || '')] || '#607d8b',
+        }));
+        const total = typeof raw.total === 'number'
+          ? raw.total
+          : dimensions.reduce((acc, d) => acc + d.score, 0);
+        return {
+          total: Math.max(0, Math.min(100, Math.round(total))),
+          dimensions,
+          comment: String(raw.comment || ''),
+          suggestions: Array.isArray(raw.suggestions) ? raw.suggestions.map(String) : [],
+        };
+      }
+
+      // AI 不可用时的兜底示例（保留旧版固定评分，页面不白屏）
+      function fallbackEssayResult() {
+        return {
           total: 78,
           dimensions: [
             { name: '立意', score: 16, max: 20, color: '#4caf50' },
@@ -721,7 +829,7 @@
             { name: '语言', score: 16, max: 20, color: '#9c27b0' },
             { name: '卷面', score: 7, max: 10, color: '#607d8b' },
           ],
-          comment: '这篇作文立意明确，紧扣新时代公安使命的主题，结合了公安实际工作，有一定的深度。但结构上略显松散，分论点之间的逻辑衔接可以更紧密。内容上论据比较充分，但可以再增加一些具体的案例和数据支撑。语言表达比较流畅，但个别地方可以更精炼。整体来看是一篇中等偏上的作文，继续加油！',
+          comment: '（示例评分，非 AI 实时结果）这篇作文立意明确，紧扣新时代公安使命的主题，结合了公安实际工作，有一定的深度。但结构上略显松散，分论点之间的逻辑衔接可以更紧密。内容上论据比较充分，但可以再增加一些具体的案例和数据支撑。语言表达比较流畅，但个别地方可以更精炼。整体来看是一篇中等偏上的作文，继续加油！',
           suggestions: [
             '开头可以更吸引人，用一个生动的案例或名言引入主题',
             '分论点之间增加过渡句，让文章结构更清晰',
@@ -730,6 +838,83 @@
             '注意段落划分，每段不要太长，200-300字一段比较合适',
           ],
         };
+      }
+
+      async function gradeEssay() {
+        if (!state.essay.content.trim()) {
+          alert('请先输入作文内容！');
+          return;
+        }
+        if (state.essay.grading) return;
+        state.essay.grading = true;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/llm/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: buildEssayPrompt(),
+              scene: 'essay',
+              persist: false,
+            }),
+          });
+          const data = await res.json();
+          const parsed = res.ok && data && data.reply ? parseAiJson(data.reply) : null;
+          if (parsed && parsed.total !== undefined && Array.isArray(parsed.dimensions)) {
+            state.essay.result = normalizeEssayResult(parsed);
+            state.error = '';
+          } else {
+            state.essay.result = fallbackEssayResult();
+            state.error = (data && data.detail) || 'AI 批改暂不可用，已展示示例评分';
+          }
+        } catch (e) {
+          state.essay.result = fallbackEssayResult();
+          state.error = '网络异常，已展示示例评分';
+        } finally {
+          state.essay.grading = false;
+        }
+      }
+
+      // ===== 学习报告（周/月，前端模拟汇总，后续可接真实统计接口） =====
+      const reportData = {
+        week: {
+          minutes: 326,
+          questions: 148,
+          accuracy: 78,
+          weak: [
+            { name: '资料分析', rate: 62 },
+            { name: '数量关系', rate: 58 },
+            { name: '图形推理', rate: 55 },
+          ],
+          trend: [65, 70, 74, 72, 78, 81, 84],
+          labels: ['一', '二', '三', '四', '五', '六', '日'],
+          comment: '本周整体状态稳步上升，正确率连续 3 天走高。资料分析仍是短板，建议每天加练 2 篇增长率/比重题。',
+        },
+        month: {
+          minutes: 1280,
+          questions: 562,
+          accuracy: 75,
+          weak: [
+            { name: '数量关系', rate: 55 },
+            { name: '资料分析', rate: 60 },
+            { name: '申论大作文', rate: 63 },
+          ],
+          trend: [68, 73, 76, 79],
+          labels: ['第1周', '第2周', '第3周', '第4周'],
+          comment: '本月累计学习时长充足，正确率环比提升 7 个百分点。数量关系基础薄弱，建议优先攻克工程、行程等高频题型。',
+        },
+      };
+
+      const rpt = computed(() => {
+        const base = reportData[state.report.period] || reportData.week;
+        return { ...base, streak: state.streak };
+      });
+
+      function setReportPeriod(p) {
+        state.report.period = p;
+      }
+
+      function printReport() {
+        window.print();
       }
 
       function reset() {
@@ -798,6 +983,16 @@
           }
         } catch (e) {}
         loadToday();
+        // 画像内嵌：未完成画像就先在本页答完，再生成方案
+        try {
+          const pr = await window.__VTJ_AUTH__.apiFetch('/api/profile');
+          const pd = await pr.json();
+          // /api/profile 无画像时只返回 { has_profile: false }，有画像才带 profile_status
+          const has = pr.ok && pd && pd.has_profile !== false;
+          const status = pd ? pd.profile_status : undefined;
+          const done = has && (status === undefined || status === null ? true : Number(status) === 1);
+          state.showQuiz = !done;
+        } catch (e) { state.showQuiz = false }
         // 连续打卡：拉真实签到数据（不再硬编码假数据）
         try {
           const ck = await window.__VTJ_AUTH__.apiFetch('/api/v1/growth/checkin/status');
@@ -820,11 +1015,35 @@
         } catch (e) {}
       });
 
+      /** 画像答完：把答案映射到生成表单，减少重复填写 */
+      function onQuizDone(answers) {
+        state.showQuiz = false;
+        if (!answers) return;
+        const map = { '行测': '行测', '申论': '申论', '公安': '公专' };
+        const weak = (answers.subject_weaknesses || [])
+          .map((s) => {
+            const key = String(s).slice(0, 2);
+            return map[key] || null;
+          })
+          .filter(Boolean);
+        if (weak.length) state.form.weak_subjects = Array.from(new Set(weak));
+        if (answers.daily_hours) state.form.daily_hours = Number(answers.daily_hours);
+        if (answers.self_level) state.form.level = String(answers.self_level);
+        if (answers.exam_date) state.form.exam_date = answers.exam_date;
+      }
+
+      function skipQuiz() {
+        state.showQuiz = false;
+      }
+
       return {
         state, subjects, levels, weekDays, getSubjectStats,
+        onQuizDone, skipQuiz,
         toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
         formatTime, togglePomodoro, resetPomodoro,
         toggleSlotTask, getScheduleProgress, gradeEssay,
+        slot: state.slot, essay: state.essay, scrollToOverview, scrollToToday,
+        rpt, setReportPeriod, printReport,
       };
     },
   });
@@ -832,6 +1051,62 @@
 
 <style lang="css" scoped>
   .plan-page { min-height: 100vh; background: #f0f3f8; }
+  .page-pad { padding: 16px 20px 0; }
+
+  /* ===== 学习报告 ===== */
+  .report-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  .report-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .report-tabs { display: flex; gap: 6px; background: #f2f4f8; border-radius: 10px; padding: 3px; }
+  .report-tab {
+    padding: 5px 14px; border-radius: 8px; font-size: 13px; color: #666; cursor: pointer;
+  }
+  .report-tab.active {
+    background: linear-gradient(135deg, #c8161e, #ef4444);
+    color: #fff; font-weight: 600;
+  }
+  .report-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 18px;
+  }
+  .report-item {
+    background: #f8f9fc; border-radius: 12px; padding: 12px 8px; text-align: center;
+  }
+  .report-num { font-size: 18px; font-weight: 700; color: #c8161e; }
+  .report-label { font-size: 11px; color: #888; margin-top: 4px; }
+  .report-trend { margin-bottom: 18px; }
+  .report-trend-title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 10px; }
+  .report-bars { display: flex; align-items: flex-end; gap: 10px; height: 90px; }
+  .report-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; }
+  .report-bar {
+    width: 100%; max-width: 26px; border-radius: 6px 6px 0 0;
+    background: linear-gradient(180deg, #ef4444, #c8161e);
+    min-height: 6px;
+  }
+  .report-bar-label { font-size: 10px; color: #888; }
+  .report-weak { margin-bottom: 16px; }
+  .report-weak-title { font-size: 13px; font-weight: 600; color: #333; margin-bottom: 10px; }
+  .report-weak-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .report-weak-name { width: 72px; font-size: 12px; color: #555; }
+  .report-weak-bar { flex: 1; height: 10px; background: #f0f2f6; border-radius: 6px; overflow: hidden; }
+  .report-weak-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #f59e0b, #ef4444); }
+  .report-weak-rate { width: 40px; text-align: right; font-size: 12px; color: #666; }
+  .report-comment {
+    background: #fff5f5; border-left: 3px solid #c8161e; border-radius: 8px;
+    padding: 10px 12px; font-size: 12px; color: #555; line-height: 1.6; margin-bottom: 14px;
+  }
+  .report-print-btn {
+    width: 100%; background: linear-gradient(135deg, #c8161e, #ef4444);
+    color: #fff; border: none; border-radius: 12px; padding: 12px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
 
   /* ===== 智能排课 ===== */
   .smart-schedule-card {
@@ -1818,4 +2093,33 @@
     .task-item { padding: 14px 16px; }
     .task-title { font-size: 15px; }
   }
+
+/* ===== 与首页视觉统一（2026-11-15 团队要求）
+   首页令牌：底色 linear-gradient(180deg,#f8f9fc,#f1f3f8)、主容器 1400px/24px 32px、
+   深蓝标题 #1a2b5f、强调红 #c41e3a、次文字 #8a8faa、卡片圆角 12px + 轻阴影 ===== */
+.plan-page {
+  background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.hero { background: #ffffff; border-bottom: 1px solid #e8ecf4; box-shadow: 0 1px 4px rgba(17, 24, 39, 0.04); }
+.hero-bg { display: none; }
+.hero-title { color: #1a2b5f; font-weight: 700; }
+.hero-sub { color: #8a8faa; }
+.hero-badge { background: rgba(196, 30, 58, 0.1); color: #c41e3a; }
+/* 内容宽度与首页一致：首页主容器 1400px / 24px 32px */
+.plan-main, .page-pad { max-width: 1400px; margin: 0 auto; padding-left: 32px; padding-right: 32px; }
+.plan-body { max-width: 1400px; margin: 0 auto; padding: 24px 32px 48px; }
+.hero-content { max-width: 1400px; margin: 0 auto; padding: 18px 32px; }
+/* hero 与首页卡片同款：不再是全宽色带，而是内容区里的一张白卡 */
+.hero { margin: 0 auto; max-width: 1400px; border: 1px solid #eef1f7; border-radius: 12px; box-shadow: 0 1px 4px rgba(17, 24, 39, 0.06); }
+.page-pad { padding-top: 28px; }
+.card, .panel, .section { border-radius: 12px; background: #fff; box-shadow: 0 1px 4px rgba(17, 24, 39, 0.06); border: 1px solid #eef1f7; }
+.section-title { color: #1a2b5f; font-weight: 700; }
+.stat-num, .wb-num, .report-num { color: #1a2b5f; }
+.stat-label, .report-label, .time-label { color: #8a8faa; }
+.action-btn:not(.ghost), .btn-primary, .primary-btn { background: #c41e3a; border-color: #c41e3a; }
+.action-btn:not(.ghost):hover, .btn-primary:hover, .primary-btn:hover { background: #a8172f; }
+.task-item { border-radius: 10px; background: #fff; border: 1px solid #eef1f7; box-shadow: none; }
+.task-item:hover { border-color: #dfe5f2; }
+@media (max-width: 900px) { .plan-main, .page-pad { padding-left: 16px; padding-right: 16px; } }
 </style>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -10,11 +11,42 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ..models.models import NewsArticle, NewsImage
+from .news_collector import clean_article_text
 from .obsidian_export import _safe_path
+
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 def _uid(news: NewsArticle) -> str:
     return f"news_{news.news_id:06d}"
+
+
+def _copy_images(db: Session, news_list: list[NewsArticle], vault: Path) -> tuple[int, int]:
+    """把卡片引用的本地图片复制到 vault 同名路径，保证 Obsidian 能解析 /uploads。"""
+    copied = 0
+    missing = 0
+    for news in news_list:
+        images = (
+            db.query(NewsImage)
+            .filter(NewsImage.news_id == news.news_id)
+            .order_by(NewsImage.image_order)
+            .all()
+        )
+        for img in images:
+            relative = Path(str(img.image_path or "").lstrip("/\\"))
+            if not relative.parts or ".." in relative.parts:
+                missing += 1
+                continue
+            source = _BACKEND_DIR / relative
+            target = vault / relative
+            if not source.is_file():
+                missing += 1
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.is_file() or target.stat().st_size != source.stat().st_size:
+                shutil.copy2(source, target)
+            copied += 1
+    return copied, missing
 
 
 def _card(db: Session, news: NewsArticle) -> str:
@@ -27,6 +59,7 @@ def _card(db: Session, news: NewsArticle) -> str:
     exam = json.loads(news.ai_exam_points or "[]")
     entities = json.loads(news.ai_entities or "[]")
     risks = json.loads(news.ai_risk_flags or "[]")
+    body = clean_article_text(news.title, news.content or "")
     lines = [
         "---",
         f"news_id: {news.news_id}",
@@ -50,6 +83,7 @@ def _card(db: Session, news: NewsArticle) -> str:
         "",
         news.ai_summary or "（待生成）",
         "",
+        *(["## 正文", "", body, ""] if body else []),
         "## 申论考点",
         "",
         *(f"- {item}" for item in exam),
@@ -57,10 +91,6 @@ def _card(db: Session, news: NewsArticle) -> str:
         "## 实体",
         "",
         *(f"- {item.get('type')}: {item.get('name')}" for item in entities),
-        "",
-        "## 图片",
-        "",
-        *(f"- ![{img.image_path}](/{img.image_path.lstrip('/')})" for img in images),
         "",
         "## 风险提示",
         "",
@@ -75,6 +105,15 @@ def _card(db: Session, news: NewsArticle) -> str:
         "- 备注：",
         "",
     ]
+    if images:
+        lines.extend(
+            [
+                "## 图片",
+                "",
+                *(f"- ![{img.image_path}](/{img.image_path.lstrip('/')})" for img in images),
+                "",
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -88,13 +127,16 @@ def export_news_board(db: Session, vault: Path, dry_run: bool = False) -> dict[s
         .order_by(NewsArticle.publish_date.desc(), NewsArticle.news_id)
         .all()
     )
-    root = vault / "00-收件箱" / "新闻"
+    images_copied, images_missing = (0, 0)
+    if not dry_run:
+        images_copied, images_missing = _copy_images(db, news_list, vault)
+    root = vault / "01-待审核"
     written = 0
     skipped = 0
     rows = []
     for news in news_list:
         date_dir = news.publish_date.date().isoformat() if news.publish_date else "未分期"
-        target = _safe_path(vault, "00-收件箱", "新闻", date_dir, f"{_uid(news)}.md")
+        target = _safe_path(vault, "01-待审核", date_dir, f"{_uid(news)}.md")
         rows.append((date_dir, news))
         if target.exists():
             skipped += 1
@@ -120,7 +162,7 @@ def export_news_board(db: Session, vault: Path, dry_run: bool = False) -> dict[s
     for date_dir, news in rows:
         risks = json.loads(news.ai_risk_flags or "[]")
         lines.append(
-            f"| {date_dir} | [[00-收件箱/新闻/{date_dir}/{_uid(news)}]] | {news.source} | "
+            f"| {date_dir} | [[01-待审核/{date_dir}/{_uid(news)}]] | {news.source} | "
             f"{news.review_status} | {'；'.join(risks) or '低'} |"
         )
     if not dry_run:
@@ -133,5 +175,7 @@ def export_news_board(db: Session, vault: Path, dry_run: bool = False) -> dict[s
         "candidates": len(news_list),
         "written": written,
         "skipped": skipped,
+        "images_copied": images_copied,
+        "images_missing": images_missing,
         "dry_run": dry_run,
     }

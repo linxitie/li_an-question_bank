@@ -32,7 +32,7 @@ def test_export_is_idempotent(tmp_path, db_session):
     assert first["ok"] is True
     assert first["written"] >= 2
     assert (vault / "04-主题地图" / "loyalty-education.md").is_file()
-    assert (vault / "01-金句" / f"q_{quote.quote_id:06d}.md").is_file()
+    assert (vault / "02-已发布" / f"q_{quote.quote_id:06d}.md").is_file()
     assert (vault / "02-新闻" / "index.md").is_file()
     assert (vault / "03-招考" / "index.md").is_file()
     assert (vault / "99-系统" / "导出清单.json").is_file()
@@ -47,7 +47,7 @@ def test_deleted_projection_is_recreated(tmp_path, db_session):
     vault.mkdir()
     quote = _prepare(db_session, vault)
     export_all(db_session, vault)
-    target = vault / "01-金句" / f"q_{quote.quote_id:06d}.md"
+    target = vault / "02-已发布" / f"q_{quote.quote_id:06d}.md"
     assert target.is_file()
     target.unlink()
 

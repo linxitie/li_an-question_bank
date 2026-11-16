@@ -1,0 +1,105 @@
+/**
+ * 内容页统一设计令牌。
+ * 深海军蓝 + 墨绿，用于新闻、金句等内容型页面。
+ */
+:root {
+  --ds-navy: #163a5f;
+  --ds-navy-deep: #102a47;
+  --ds-ink: #2f5d50;
+  --ds-ink-deep: #23483d;
+  --ds-ink-soft: #eaf2ee;
+  --ds-bg: #f5f7fa;
+  --ds-surface: #ffffff;
+  --ds-text: #1f2d3d;
+  --ds-muted: #8492a6;
+  --ds-subtle: #b4becb;
+  --ds-border: #ebeef5;
+  --ds-radius: 12px;
+  --ds-radius-lg: 16px;
+  --ds-shadow: 0 2px 12px rgba(16, 42, 71, 0.05);
+  --ds-shadow-hover: 0 10px 28px rgba(16, 42, 71, 0.12);
+  --ds-transition: all 0.3s ease;
+}
+
+.ds-page {
+  box-sizing: border-box;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 36px 28px 64px;
+  background: var(--ds-bg);
+  color: var(--ds-text);
+}
+
+.ds-eyebrow {
+  display: inline-block;
+  color: var(--ds-ink);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.ds-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 9px 15px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+  transition: var(--ds-transition);
+}
+
+.ds-button--primary {
+  background: var(--ds-ink);
+  color: #fff;
+}
+
+.ds-button--primary:hover {
+  background: var(--ds-ink-deep);
+  box-shadow: 0 5px 14px rgba(47, 93, 80, 0.2);
+}
+
+.ds-button--ghost {
+  border-color: var(--ds-border);
+  background: var(--ds-surface);
+  color: var(--ds-navy);
+}
+
+.ds-button--ghost:hover {
+  border-color: var(--ds-ink);
+  color: var(--ds-ink);
+}
+
+.ds-card {
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius);
+  background: var(--ds-surface);
+  box-shadow: var(--ds-shadow);
+  transition: var(--ds-transition);
+}
+
+.ds-card:hover {
+  box-shadow: var(--ds-shadow-hover);
+}
+
+.ds-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #f0f4f8;
+  color: #53657a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 640px) {
+  .ds-page {
+    padding: 22px 14px 48px;
+  }
+}

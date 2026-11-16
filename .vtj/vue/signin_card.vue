@@ -65,14 +65,23 @@
         <div class="progress-fill" :style="{ width: state.progressPercent + '%' }"></div>
       </div>
     </div>
+
+    <!-- 3D 学习日历（模块4 P3） -->
+    <StudyCalendar3D />
+
+    <!-- 签到星图（4-3）：连续天数点亮星座 -->
+    <CheckinConstellation />
   </div>
 </template>
 <script lang="ts">
   // @ts-nocheck
   import { defineComponent, reactive } from 'vue';
   import { useProvider } from '@vtj/renderer';
+  import StudyCalendar3D from '@/components/checkin/StudyCalendar3D.vue';
+  import CheckinConstellation from '@/components/checkin/CheckinConstellation.vue';
   export default defineComponent({
     name: 'SignInCard',
+    components: { StudyCalendar3D, CheckinConstellation },
     setup(props) {
       const provider = useProvider({ id: 'signin_card', version: '1778917723201' });
       const state = reactive({

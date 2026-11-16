@@ -16,6 +16,9 @@
           <ExamCalendar></ExamCalendar>
         </div>
       </section>
+      <section class="plan-section">
+        <StudyPlanCard variant="home" />
+      </section>
       <section class="study-materials-section">
         <StudyMaterialsEntry></StudyMaterialsEntry>
       </section>
@@ -26,6 +29,7 @@
             <span>招考信息</span>
           </h2>
           <span class="section-subtitle">最新招考动态，助你把握每一个机会</span>
+          <RecruitmentRadarEntry />
         </div>
         <div class="recruit-grid">
           <div v-for="(item, index) in state.recruitCategories"
@@ -126,6 +130,9 @@
         </p>
       </footer>
     </main>
+
+    <!-- 番茄钟小窗（模块4 P3）：固定在右下角，专注结束顺手补签到 -->
+    <PomodoroWidget />
   </div>
 </template>
 <script lang="ts">
@@ -144,6 +151,9 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   import CountdownTimer from './countdown_timer.vue';
   import ExamCalendar from './exam_calendar_block.vue';
   import StudyMaterialsEntry from './study_materials.vue';
+  import RecruitmentRadarEntry from '@/components/recruitment/RecruitmentRadarEntry.vue';
+  import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
+  import PomodoroWidget from '@/components/focus/PomodoroWidget.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useCheckinStore } from '@/modules/checkin/store';
@@ -193,6 +203,9 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
       CountdownTimer,
       ExamCalendar,
       StudyMaterialsEntry,
+      RecruitmentRadarEntry,
+      StudyPlanCard,
+      PomodoroWidget,
       XIcon
     },
     setup(props) {
@@ -361,11 +374,26 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   .study-materials-section {
     margin-bottom: 28px;
   }
+  .recruit-section {
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+  }
   .section-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 12px;
     margin-bottom: 16px;
+  }
+  .recruit-section .section-header {
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .section-header :deep(.radar-entry) {
+    margin-left: auto;
   }
   .section-title {
     display: flex;
@@ -382,22 +410,28 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   }
   .recruit-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
+    justify-content: center;
   }
   @media (max-width: 900px) {
     .recruit-grid {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
   @media (max-width: 600px) {
     .recruit-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 
   /* 招考卡片 — 纯白底色 */
   .recruit-card {
+    min-width: 0;
     background: #ffffff; border-radius: 14px; padding: 18px;
     box-shadow: 0 1px 8px rgba(26,43,95,0.04); border: 1px solid #f0f2f5;
     transition: all 0.3s; display: flex; flex-direction: column;
@@ -466,6 +500,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   }
 
   .recruit-title-text {
+    min-width: 0;
     font-size: 20px; color: #2c3e50; flex: 1;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }

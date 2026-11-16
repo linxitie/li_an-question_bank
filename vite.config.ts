@@ -67,6 +67,43 @@ function buildStamp(): Plugin {
   };
 }
 
+/**
+ * dev 阶段禁止浏览器缓存源码模块（2026-11-14）。
+ *
+ * Chrome 磁盘缓存损坏时，懒加载模块会报 ERR_CACHE_READ_FAILURE，
+ * 页面停「模块加载失败」且要刷新多次；dev 本身不需要缓存，直接 no-store 从源头避免。
+ * API / WebSocket / 媒体代理不参与，避免影响接口与图片。
+ */
+function devNoStore(): Plugin {
+  return {
+    name: 'dev-no-store',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = req.url || '';
+        if (url.startsWith('/api') || url.startsWith('/ws') || url.startsWith('/media')) {
+          next();
+          return;
+        }
+        const setHeader = res.setHeader.bind(res) as (
+          name: string,
+          value: string | number | readonly string[]
+        ) => void;
+        setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        setHeader('Pragma', 'no-cache');
+        // Vite 内部会再把 Cache-Control 改回 no-cache，这里兜住所有后续写入
+        res.setHeader = ((name: string, value: string | number | readonly string[]) => {
+          if (String(name).toLowerCase() === 'cache-control') {
+            return setHeader(name, 'no-store, no-cache, must-revalidate');
+          }
+          return setHeader(name, value);
+        }) as typeof res.setHeader;
+        next();
+      });
+    }
+  };
+}
+
 function devRuntimeSafety(): Plugin {
   const routeBySocket = new WeakMap<object, string>();
   const lastLogAt = new Map<string, number>();
@@ -140,6 +177,7 @@ export default createViteConfig({
   proxy,
   plugins: [
     buildStamp(),
+    devNoStore(),
     devRuntimeSafety(),
     createDevTools({ hm: '' }),
   ],

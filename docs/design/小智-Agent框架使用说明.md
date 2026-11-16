@@ -1,4 +1,4 @@
-## 一、四项探查结果汇总
+﻿## 一、四项探查结果汇总
 1. opencode 与项目中 MCP-server 现状
 项	现状
 全局 opencode 配置	~/.config/opencode/opencode.jsonc 近乎空白，仅 $schema，未预置 model/skills
@@ -32,10 +32,10 @@ VTJ MCP Server	vtj-mcp-server/ 提供 19 个工具 + 3 个资源，桥接与 VTJ
 目录分层重构进行中（P0→P6，当前分支 feat/student-containerization）。用户后续的教师端题目导入改造与三端「导入—展示—通信」数据一致性工作，必须在 P3B 完成后再启动，否则冲突不可控。
 凭据处理：禁止将真实密钥写入 .md / 源码 / 提交信息；.env 禁止入 Git，须配 .gitignore + .env.example；已泄露密钥须轮换（backend/.env JWT_SECRET_KEY 待轮换）。
 
-4. deepseek-harness 内部结构与能力（公开文档摘要）
-- 定位：DeepSeek AI 开源 Agent Harness，everything-is-a-plugin 架构，基于 Cordis（时空可组合编程范式）。
+4. 大模型服务-harness 内部结构与能力（公开文档摘要）
+- 定位：大模型服务 AI 开源 Agent Harness，everything-is-a-plugin 架构，基于 Cordis（时空可组合编程范式）。
 - 核心包（ctx 服务模型）：core/session（仅追加 SessionEvent 日志+内存存储）、core/system-prompt（提示词片段+工具 schema 组装）、core/tools（作用域化工具注册表+带把关执行流水线）、core/agent（Agent 接口+活跃注册表）、core/agent-loop（默认驱动器）、core/scope（按 agent 作用域的注册原语）、llm/llm（消息与流式词汇表+适配器 seam，ctx.llm）。
-- LLM 层：ctx.llm.stream(options) 流式模型调用，返回 block-start/text-delta/tool-call-delta/finish 等 raw chunk；registerAdapter/listProviders/resolveModelInfo/resolveCallConfig/prepareCall；适配器如 llm-deepseek（deepseek-official 直连+SSE）、llm-pi-ai（多提供商网关）；llm-retry 精确提供商重试；BlockAssembler 将 chunks 组装为块/消息。请求按模型能力校验（context window、output default、reasoning effort、输入模态、systemPromptUpdate 模式），输入 deep-frozen。
+- LLM 层：ctx.llm.stream(options) 流式模型调用，返回 block-start/text-delta/tool-call-delta/finish 等 raw chunk；registerAdapter/listProviders/resolveModelInfo/resolveCallConfig/prepareCall；适配器如 llm-大模型服务（大模型服务-official 直连+SSE）、llm-pi-ai（多提供商网关）；llm-retry 精确提供商重试；BlockAssembler 将 chunks 组装为块/消息。请求按模型能力校验（context window、output default、reasoning effort、输入模态、systemPromptUpdate 模式），输入 deep-frozen。
 - 面向模型工具：shell、terminal、fs、lsp、web、attachment 等能力 seam。
 - 技能系统：skill service，发现优先级、session-prefix 目录、模型面向的 skill 加载。
 - 子代理/工作流/计划：subagent（命名提供商注册表、start-time vs runtime 能力拆分）、workflow（worker 线程引擎、workflow/ralph 工具）、plan（Plan 协作状态、审核退出弧）、preset（按会话组装 agent）。
@@ -45,7 +45,7 @@ VTJ MCP Server	vtj-mcp-server/ 提供 19 个工具 + 3 个资源，桥接与 VTJ
 - PTC 模式：packages/ptc-runtime/（PtcRunRequest/Result，binding namespaces，captured logs，PtcRunFailure 税收），可用于代码执行与计算密集型任务。
 关于 DeepInfer（你提到的开源推理框架）：公开文档中未直接出现 DeepInfer。建议你确认其具体 API 与部署方式；若已有本地 DeepInfer 推理服务，可将其作为 dsh 的自定义 llm-adapter 接入，用于 token 高效推理。
 
-## 二、deepseek-harness 多角色系统设计方案框架
+## 二、大模型服务-harness 多角色系统设计方案框架
 2.1 角色–dsh subagent 分配矩阵
 角色	dsh 映射	职责
 系统总设计师 / 架构师	dsh Lead agent（agent-team 隐式 Lead）	全局架构决策、边界划分、角色间契约定义、技术选型签栁
@@ -59,11 +59,11 @@ dsh agent-team 支持隐式 Lead 身份、命名可继续的队友、直接 peer
 2.2 dsh 插件扩展架构（系统总设计师视角）
 基于 dsh everything-is-a-plugin 与 Cordis service 模型，为题库系统构建四层插件：
 题库系统 dsh 插件套件
-├── ctx.llm adapter (DeepInfer / deepseek-official) —— 模型调用层，支持标准/创造/PTC 模式切换
+├── ctx.llm adapter (DeepInfer / 大模型服务-official) —— 模型调用层，支持标准/创造/PTC 模式切换
 ├── ctx.tools 工具层 —— 包装 vtj-mcp-server、后端 API 调用、数据库备份、测试执行
 ├── ctx.skill 技能层 —— 加载 li-an-workflow、vtj-frontend、token-optimization 等 project skills
 ├── subagent/team 层 —— 上述 6 角色的 agent 分配与协作编排
-- 适配器注册：ctx.llm.registerAdapter 注册 DeepInfer 本地推理适配器与 deepseek-official 云端适配器，按模式路由（标准→云端/本地混合；创造→云端高创造力模型；PTC→本地 DeepInfer 代码执行推理）。
+- 适配器注册：ctx.llm.registerAdapter 注册 DeepInfer 本地推理适配器与 大模型服务-official 云端适配器，按模式路由（标准→云端/本地混合；创造→云端高创造力模型；PTC→本地 DeepInfer 代码执行推理）。
 - 水fal 中间件：利用 llm/stream 水流中间件做 token 统计、缓存命中记录、请求冻结校验。
 - 会话持久化：dsh session JSONL/SQLite 后端记录所有设计与测试轨迹，支持 session-query 语义检索与血缘追溯。
 2.3 模式调用体系（标准 / 创造 / PTC）
@@ -74,7 +74,7 @@ PTC 模式	packages/ptc-runtime（PtcRunRequest/Result，binding namespaces）	�
 2.4 Token 高效率与高质量使用策略（DeepInfer + skills）
 
 1. DeepInfer 作为本地推理后端：
-- 接入 dsh ctx.llm 自定义 adapter，处理标准模式与 PTC 模式的大部分请求，降低云端 DeepSeek 调用成本。
+- 接入 dsh ctx.llm 自定义 adapter，处理标准模式与 PTC 模式的大部分请求，降低云端 大模型服务 调用成本。
 - 对重复性强的设计/测试文本（如 DSL 模板、接口 Schema 模板）使用 DeepInfer 本地生成，仅关键架构决策走云端。
 
 2. project skills 联合节省：
