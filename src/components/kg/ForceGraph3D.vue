@@ -113,7 +113,9 @@ function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, w, h)
 
-  if (!reduced && ticks < 260) { tick(); ticks += 1 }
+  // 窄屏节点多、O(n^2) 逐帧计算代价高，收敛帧数按视口降档
+  const tickBudget = window.innerWidth < 768 ? 140 : 260
+  if (!reduced && ticks < tickBudget) { tick(); ticks += 1 }
 
   const pos = {}
   state.nodes.forEach(function (n) {

@@ -670,10 +670,18 @@ async function loadKnownPoints() {
   } catch (e) { /* 静默：没有词典就不显示气泡 */ }
 }
 
-/** 在回答文本里找出命中的考点，最多 6 个 */
+/**
+ * 在回答文本里找出命中的考点，最多 6 个。
+ * 流式输出时正文每帧都变，若每次都全量比对 600+ 考点会卡；
+ * 这里按「文本长度 + 首尾字符」做一次轻量缓存，同一段文字只算一次。
+ */
+const traceCache = new Map()
 function traceOf(content) {
   if (!content || !state.knownPoints.length) return []
   const text = String(content)
+  const key = text.length + "|" + text.slice(0, 8) + "|" + text.slice(-8)
+  const hit = traceCache.get(key)
+  if (hit) return hit
   const seen = {}
   const out = []
   for (const p of state.knownPoints) {
@@ -684,6 +692,8 @@ function traceOf(content) {
       if (out.length >= 6) break
     }
   }
+  if (traceCache.size > 200) traceCache.clear()
+  traceCache.set(key, out)
   return out
 }
 
