@@ -53,8 +53,30 @@ const generating = ref(false);
 const mode = ref<'mine' | 'global'>('mine');
 const view = ref<'2d' | '3d'>('3d');
 
-function onNodeSelect(node: { name?: string }): void {
-  ElMessage.info(String(node?.name || '节点'));
+interface KgNodePick {
+  id: number | string;
+  name: string;
+  degree: number;
+  neighbors: { id: number | string; name: string; rel?: string }[];
+}
+
+/** 3D 图谱下钻：点击节点后展示它的一跳邻居 */
+const selected = ref<KgNodePick | null>(null);
+
+function onNodeSelect(node: any): void {
+  selected.value = {
+    id: node?.id,
+    name: String(node?.name || '考点'),
+    degree: Number(node?.degree || 0),
+    neighbors: node?.neighbors || []
+  };
+}
+
+function relLabel(rel?: string): string {
+  if (rel === 'contains') return '包含';
+  if (rel === 'prerequisite_of') return '前置';
+  if (rel === 'confusable') return '易混';
+  return '关联';
 }
 
 function apiFetch(url: string, init?: RequestInit): Promise<Response> {

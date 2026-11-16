@@ -179,11 +179,13 @@ function onClick(e) {
   const mx = e.clientX - rect.left
   const my = e.clientY - rect.top
   let best = null
-  let bestD = 16
+  // 命中半径随视口放宽：球体缩小后节点密集，16px 实测点不中，改为 30px 起步
+  let bestD = Math.max(30, Math.min(48, rect.width / 30))
+  let bestProjected = null
   state.nodes.forEach(function (n) {
     const p = project(n, rect.width, rect.height)
     const d = Math.hypot(p.sx - mx, p.sy - my)
-    if (d < bestD) { bestD = d; best = n }
+    if (d < bestD) { bestD = d; best = n; bestProjected = p }
   })
   state.nodes.forEach(function (n) { n.hover = n === best })
   if (best) {
