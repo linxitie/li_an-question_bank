@@ -3,6 +3,12 @@
   <div class="profile-page">
     <div class="profile-nav"><NavBar /></div>
     <main class="profile-main">
+      <!-- 顶部：学习周报 + 方案版本对比（主区第一屏可见） -->
+      <div class="top-insights">
+        <WeeklyReportCard />
+        <PlanDiffPanel />
+      </div>
+
       <!-- 左栏：个人资料 + 成就/等级/设置 -->
       <div class="side-col">
       <aside class="left-col">
@@ -19,8 +25,6 @@
 
         <StudyPlanCard variant="profile" />
         <ProfileRadar />
-        <WeeklyReportCard />
-        <PlanDiffPanel />
 
       </aside>
 
@@ -588,6 +592,17 @@ function handleLogout() {
   grid-template-columns: 300px 1fr;
   gap: 20px;
   align-items: start;
+}
+/* 顶部洞察区：跨两列铺满，第一屏就能看到周报与版本对比 */
+.top-insights {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 1024px) {
+  .top-insights { grid-template-columns: 1fr; }
 }
 .side-col {
   position: sticky;
