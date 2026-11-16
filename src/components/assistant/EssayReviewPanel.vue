@@ -131,6 +131,20 @@ async function grade() {
 .essay__result-title { margin: 0 0 8px; font-size: 13px; font-weight: 700; color: #1a2b5f; }
 .essay__result-body { margin: 0; white-space: pre-wrap; font-family: inherit; font-size: 13px; line-height: 1.75; color: #374151; }
 
+/* 深色主题：小智工作台切到深色时，作文批改抽屉同步换色，避免白板突兀 */
+:global(.xz--dark) .essay__panel { background: rgb(35, 35, 36); color: rgb(249, 250, 251); }
+:global(.xz--dark) .essay__title { color: rgb(249, 250, 251); }
+:global(.xz--dark) .essay__sub { color: rgb(129, 133, 140); }
+:global(.xz--dark) .essay__field { color: rgb(173, 178, 184); }
+:global(.xz--dark) .essay__input,
+:global(.xz--dark) .essay__textarea { background: rgb(44, 44, 46); border-color: rgba(255,255,255,0.12); color: rgb(249, 250, 251); }
+:global(.xz--dark) .essay__input:focus,
+:global(.xz--dark) .essay__textarea:focus { border-color: rgb(86, 134, 254); box-shadow: 0 0 0 3px rgba(86,134,254,.18); }
+:global(.xz--dark) .essay__result { border-top-color: rgba(255,255,255,0.08); }
+:global(.xz--dark) .essay__result-title { color: rgb(249, 250, 251); }
+:global(.xz--dark) .essay__result-body { color: rgb(207, 211, 214); }
+:global(.xz--dark) .essay__fab { background: rgb(44, 44, 46); color: rgb(249, 250, 251); }
+
 .fade-enter-active, .fade-leave-active { transition: opacity 200ms ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
