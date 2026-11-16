@@ -3399,3 +3399,19 @@ class FocusRecord(Base):
         Index("idx_focus_user_time", user_id, started_at),
         {"sqlite_autoincrement": True},
     )
+
+class StudyPlanSnapshot(Base):
+    """备考方案版本快照（模块4 · 7-4 双栏 diff 的数据基础）"""
+    __tablename__ = "study_plan_snapshot"
+
+    snapshot_id = Column(Integer, primary_key=True, autoincrement=True, comment="快照ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    plan_id = Column(Integer, nullable=True, comment="所属计划ID")
+    version = Column(Integer, default=1, comment="同计划内的版本号")
+    payload = Column(Text, comment="快照内容JSON(summary/phases/tasks)")
+    task_count = Column(Integer, default=0, comment="快照内任务数")
+    created_at = Column(DateTime, default=datetime.now, comment="生成时间")
+
+    __table_args__ = (
+        Index("idx_snapshot_user_plan", user_id, plan_id, version),
+    )
