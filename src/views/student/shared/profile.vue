@@ -9,6 +9,15 @@
         <PlanDiffPanel />
       </div>
 
+      <!-- 快捷入口：导航只保留五项，这些功能从这里进 -->
+      <nav class="quick-links">
+        <button v-for="l in quickLinks" :key="l.path" class="quick-link" @click="go(l.path)">
+          <span class="quick-link__icon">{{ l.icon }}</span>
+          <span class="quick-link__label">{{ l.label }}</span>
+          <span class="quick-link__desc">{{ l.desc }}</span>
+        </button>
+      </nav>
+
       <!-- 左栏：个人资料 + 成就/等级/设置 -->
       <div class="side-col">
       <aside class="left-col">
@@ -307,6 +316,13 @@ import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
 import ProfileRadar from '@/components/profile/ProfileRadar.vue';
 import WeeklyReportCard from '@/components/growth/WeeklyReportCard.vue';
 import PlanDiffPanel from '@/components/plan/PlanDiffPanel.vue';
+
+const quickLinks = [
+  { path: '/wrong-questions', icon: '📕', label: '错题集', desc: '错题与复习排程' },
+  { path: '/student/knowledge/graph', icon: '🕸️', label: '知识图谱', desc: '考点关系地图' },
+  { path: '/study-plan', icon: '📋', label: '学习计划', desc: '方案与今日任务' },
+  { path: '/ai-studio', icon: '💬', label: '联考小智', desc: '问问题 / 作文批改' },
+]
 // 学习分布（科目占比 + 对错比例）与错题知识点：数据来自 P2 新增的两个只读聚合端点
 import SubjectDistributionCard from '@/components/domain/SubjectDistributionCard.vue';
 import WrongPointStatsCard from '@/components/domain/WrongPointStatsCard.vue';
@@ -603,6 +619,26 @@ function handleLogout() {
 }
 @media (max-width: 1024px) {
   .top-insights { grid-template-columns: 1fr; }
+}
+/* 快捷入口：导航固定五项，这些功能从这里进 */
+.quick-links {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.quick-link {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 14px 16px; border-radius: 12px; border: 1px solid #eef1f7;
+  background: #fff; cursor: pointer; text-align: left;
+  transition: border-color .18s ease, transform .18s ease;
+}
+.quick-link:hover { border-color: #c9d4ff; transform: translateY(-2px); }
+.quick-link__icon { font-size: 18px; }
+.quick-link__label { font-size: 13.5px; font-weight: 700; color: #1a2b5f; }
+.quick-link__desc { font-size: 11.5px; color: #8a8faa; }
+@media (max-width: 1024px) {
+  .quick-links { grid-template-columns: repeat(2, 1fr); }
 }
 .side-col {
   position: sticky;
