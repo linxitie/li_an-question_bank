@@ -171,6 +171,7 @@ async function finish() {
 
   if (state.mode === 'focus') {
     state.sessionsToday += 1
+    await recordFocus(FOCUS_MIN)
     await autoCheckin()
     // 自动进入 5 分钟休息
     state.mode = 'break'
@@ -190,6 +191,19 @@ function getToken() {
     }
   } catch (e) { /* ignore */ }
   return localStorage.getItem('token') || ''
+}
+
+/** 专注结束写一条记录，供专注力热力图统计 */
+async function recordFocus(minutes) {
+  const token = getToken()
+  if (!token) return
+  try {
+    await fetch("/api/v1/growth/focus/record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ minutes: minutes, mode: "focus", source: "widget" }),
+    })
+  } catch (e) { /* 网络失败不影响计时 */ }
 }
 
 /** 专注结束顺手补签到：接口本身幂等，已签不会重复发奖 */

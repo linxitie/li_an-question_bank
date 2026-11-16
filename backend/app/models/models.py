@@ -3381,3 +3381,21 @@ class JobParseRun(Base):
     model = Column(String(100))
     error = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
+
+class FocusRecord(Base):
+    """番茄钟专注记录（模块4 · 4-1 专注力热力图的数据源）"""
+    __tablename__ = "focus_record"
+
+    record_id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    started_at = Column(DateTime, nullable=False, comment="本次专注开始时间")
+    ended_at = Column(DateTime, nullable=False, comment="本次专注结束时间")
+    minutes = Column(Integer, default=0, comment="实际专注分钟数")
+    mode = Column(String(10), default="focus", comment="focus/break")
+    source = Column(String(20), default="widget", comment="来源 widget/immersive/plan")
+    created_at = Column(DateTime, default=datetime.now, comment="写入时间")
+
+    __table_args__ = (
+        Index("idx_focus_user_time", user_id, started_at),
+        {"sqlite_autoincrement": True},
+    )

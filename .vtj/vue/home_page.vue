@@ -18,6 +18,7 @@
       </section>
       <section class="plan-section">
         <StudyPlanCard variant="home" />
+        <FocusHeatmap />
       </section>
       <section class="study-materials-section">
         <StudyMaterialsEntry></StudyMaterialsEntry>
@@ -154,6 +155,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   import RecruitmentRadarEntry from '@/components/recruitment/RecruitmentRadarEntry.vue';
   import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
   import PomodoroWidget from '@/components/focus/PomodoroWidget.vue';
+  import FocusHeatmap from '@/components/focus/FocusHeatmap.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useCheckinStore } from '@/modules/checkin/store';
@@ -206,6 +208,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
       RecruitmentRadarEntry,
       StudyPlanCard,
       PomodoroWidget,
+      FocusHeatmap,
       XIcon
     },
     setup(props) {
