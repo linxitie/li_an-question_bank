@@ -20,6 +20,7 @@
         <StudyPlanCard variant="profile" />
         <ProfileRadar />
         <WeeklyReportCard />
+        <PlanDiffPanel />
 
       </aside>
 
@@ -301,6 +302,7 @@ import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue
 import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
 import ProfileRadar from '@/components/profile/ProfileRadar.vue';
 import WeeklyReportCard from '@/components/growth/WeeklyReportCard.vue';
+import PlanDiffPanel from '@/components/plan/PlanDiffPanel.vue';
 // 学习分布（科目占比 + 对错比例）与错题知识点：数据来自 P2 新增的两个只读聚合端点
 import SubjectDistributionCard from '@/components/domain/SubjectDistributionCard.vue';
 import WrongPointStatsCard from '@/components/domain/WrongPointStatsCard.vue';
