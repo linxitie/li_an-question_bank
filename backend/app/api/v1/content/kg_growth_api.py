@@ -213,6 +213,15 @@ async def global_graph(
             }
         )
 
+    # 用户维度的节点状态（掌握度/热度/答题数）——此前这里是硬编码 0，
+    # 导致 3D 图谱永远显示「全部未掌握」，答题数据完全进不了图。
+    states = {
+        s.point_id: s
+        for s in db.query(KgUserNodeState)
+        .filter(KgUserNodeState.user_id == current_user.user_id)
+        .all()
+    }
+
     degree: dict[int, int] = {}
     for e in edges:
         degree[e["src_point"]] = degree.get(e["src_point"], 0) + 1
@@ -225,11 +234,20 @@ async def global_graph(
                 "point_id": p.point_id,
                 "point_name": p.point_name,
                 "subject_id": p.subject_id,
-                "mastery": 0.0,
-                "heat": float(degree.get(p.point_id, 0)),
-                "attempt_count": 0,
-                "correct_count": 0,
-                "contribution": 0.0,
+                "mastery": round(float(states[p.point_id].mastery or 0.0), 4) if p.point_id in states else 0.0,
+                # 热度 = 结构连接度 + 用户行为热度，两者含义不同但都体现在节点大小上
+                "heat": round(
+                    float(degree.get(p.point_id, 0))
+                    + (float(states[p.point_id].heat or 0.0) if p.point_id in states else 0.0),
+                    4,
+                ),
+                "attempt_count": int(states[p.point_id].attempt_count or 0) if p.point_id in states else 0,
+                "correct_count": int(states[p.point_id].correct_count or 0) if p.point_id in states else 0,
+                "contribution": round(
+                    (float(states[p.point_id].heat or 0.0) * (1 - float(states[p.point_id].mastery or 0.0)))
+                    if p.point_id in states else 0.0,
+                    4,
+                ),
             }
             for p in points
         ],
