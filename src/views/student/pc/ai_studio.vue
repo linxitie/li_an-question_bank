@@ -77,6 +77,14 @@
             </div>
 
             <div class="xz-msg__text" v-html="render(m.content)"></div>
+
+            <!-- 溯源气泡：回答里出现的考点，可点开查看 -->
+            <div v-if="m.role === 'assistant' && traceOf(m.content).length" class="trace">
+              <span class="trace__label">涉及考点</span>
+              <button v-for="p in traceOf(m.content)" :key="p.id" class="trace__chip" @click="openPoint(p)">
+                {{ p.name }}
+              </button>
+            </div>
             <span v-if="m.streaming" class="cursor"></span>
 
             <div v-if="!m.streaming && m.content" class="xz-msg__ops">
@@ -125,6 +133,15 @@
     </main>
 
     <!-- 设置抽屉 -->
+    <div v-if="pointDrawer.open" class="xz-drawer" @click.self="pointDrawer.open = false">
+      <div class="xz-drawer__panel">
+        <h3>{{ pointDrawer.name }}</h3>
+        <p class="xz-drawer__note">来自知识图谱的知识点节点</p>
+        <a class="xz-drawer__link" :href="'#/knowledge'" @click="pointDrawer.open = false">在地图里查看 →</a>
+        <button class="xz-drawer__close" @click="pointDrawer.open = false">关闭</button>
+      </div>
+    </div>
+
     <div v-if="settingsOpen" class="xz-drawer" @click.self="settingsOpen = false">
       <div class="xz-drawer__panel">
         <h3>设置</h3>
@@ -168,6 +185,7 @@ const sessions = ref([])
 const query = ref("")
 const showJump = ref(false)
 const toast = ref("")
+const pointDrawer = ref({ open: false, name: "", id: null })
 const state = reactive({
   sessionId: "",
   mode: "chat",        // chat | agent
@@ -178,6 +196,7 @@ const state = reactive({
   fontSize: 14,
   theme: "light",
   attachments: [],
+  knownPoints: [],
 })
 let controller = null
 
@@ -589,7 +608,44 @@ function stop() { if (controller) controller.abort() }
 
 watch(function () { return state.sessionId }, function () { scrollBottom() })
 
+/** 从知识图谱拉一份考点名词典，用于回答里的溯源气泡 */
+async function loadKnownPoints() {
+  const t = token()
+  if (!t) return
+  try {
+    const res = await fetch("/api/knowledge/kg/global?limit=800", {
+      headers: { Authorization: "Bearer " + t },
+    })
+    const d = await res.json()
+    state.knownPoints = (d.nodes || [])
+      .map(function (n) { return { id: n.point_id, name: String(n.point_name || "") } })
+      .filter(function (p) { return p.name.length >= 2 })
+  } catch (e) { /* 静默：没有词典就不显示气泡 */ }
+}
+
+/** 在回答文本里找出命中的考点，最多 6 个 */
+function traceOf(content) {
+  if (!content || !state.knownPoints.length) return []
+  const text = String(content)
+  const seen = {}
+  const out = []
+  for (const p of state.knownPoints) {
+    if (seen[p.name]) continue
+    if (text.indexOf(p.name) >= 0) {
+      seen[p.name] = true
+      out.push(p)
+      if (out.length >= 6) break
+    }
+  }
+  return out
+}
+
+function openPoint(p) {
+  pointDrawer.value = { open: true, name: p.name, id: p.id }
+}
+
 onMounted(function () {
+  loadKnownPoints()
   try {
     const t = localStorage.getItem("li_an_xiaozhi_theme")
     if (t === "dark" || t === "light") state.theme = t
