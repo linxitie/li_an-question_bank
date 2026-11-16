@@ -664,9 +664,23 @@ async function loadKnownPoints() {
       headers: { Authorization: "Bearer " + t },
     })
     const d = await res.json()
-    state.knownPoints = (d.nodes || [])
+    const raw = (d.nodes || [])
       .map(function (n) { return { id: n.point_id, name: String(n.point_name || "") } })
       .filter(function (p) { return p.name.length >= 2 })
+    // 考点名常含「与/的」等连接词，回答里往往只说其中一段（如「二十大精神」），
+    // 因此额外拆出别名，提高命中率；别名只用于匹配，展示仍用全名。
+    const expanded = []
+    raw.forEach(function (p) {
+      // 全名本身作为一条；别名额外加入，但都指向同一个考点 id 与全名
+      expanded.push({ id: p.id, name: p.name, canonical: p.name })
+      const parts = p.name.split(/与|的|、|，/)
+      if (parts.length > 1) {
+        parts.forEach(function (part) {
+          if (part.length >= 4) expanded.push({ id: p.id, name: part, canonical: p.name })
+        })
+      }
+    })
+    state.knownPoints = expanded
   } catch (e) { /* 静默：没有词典就不显示气泡 */ }
 }
 
@@ -685,10 +699,11 @@ function traceOf(content) {
   const seen = {}
   const out = []
   for (const p of state.knownPoints) {
-    if (seen[p.name]) continue
+    // 同一考点只出一次；命中别名时展示全名，避免出现「二十大精神」与「党的二十大的精神」两条
+    if (seen[p.id]) continue
     if (text.indexOf(p.name) >= 0) {
-      seen[p.name] = true
-      out.push(p)
+      seen[p.id] = true
+      out.push({ id: p.id, name: p.canonical || p.name })
       if (out.length >= 6) break
     }
   }
