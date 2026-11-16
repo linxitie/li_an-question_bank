@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
@@ -60,10 +60,13 @@ async def due_reviews(
             WrongQuestionPersonal.user_id == current_user.user_id,
             WrongQuestionPersonal.status == 1,
             WrongQuestionPersonal.collection_type == "WRONG",
-            WrongQuestionPersonal.next_review_at.isnot(None),
-            WrongQuestionPersonal.next_review_at <= now,
+            # 未排程（NULL）的错题也必须立刻可复习，否则新错题永远进不了队列
+            or_(
+                WrongQuestionPersonal.next_review_at.is_(None),
+                WrongQuestionPersonal.next_review_at <= now,
+            ),
         )
-        .order_by(WrongQuestionPersonal.next_review_at.asc())
+        .order_by(WrongQuestionPersonal.next_review_at.asc().nullsfirst())
         .limit(max(1, min(limit, 100)))
         .all()
     )
@@ -102,13 +105,19 @@ async def review_summary(
         )
 
     total = base().scalar() or 0
+    # 未排程（NULL）视为「今天到期」，与 /due 的口径保持一致，否则出现
+    # 「列表明明有题、汇总却说今天 0 题」的矛盾
     due_today = base().filter(
-        WrongQuestionPersonal.next_review_at.isnot(None),
-        WrongQuestionPersonal.next_review_at <= now,
+        or_(
+            WrongQuestionPersonal.next_review_at.is_(None),
+            WrongQuestionPersonal.next_review_at <= now,
+        )
     ).scalar() or 0
     due_week = base().filter(
-        WrongQuestionPersonal.next_review_at.isnot(None),
-        WrongQuestionPersonal.next_review_at <= week_later,
+        or_(
+            WrongQuestionPersonal.next_review_at.is_(None),
+            WrongQuestionPersonal.next_review_at <= week_later,
+        )
     ).scalar() or 0
     unscheduled = base().filter(WrongQuestionPersonal.next_review_at.is_(None)).scalar() or 0
     return {
