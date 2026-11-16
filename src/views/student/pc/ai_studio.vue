@@ -114,6 +114,9 @@
                     @keydown.enter.exact.prevent="send()"></textarea>
           <div class="composer__bar">
             <button class="chip chip--icon" title="添加附件（图片 / PDF / 文档）" @click="pickFile">📎</button>
+            <button class="chip chip--icon" :class="{ on: state.listening }"
+                    :title="state.listening ? '正在听…点一下停止' : '语音输入'"
+                    @click="toggleVoice">{{ state.listening ? "●" : "🎤" }}</button>
             <input id="xz-file" type="file" multiple class="xz-file" @change="onFileChange" />
             <button class="chip" :class="{ on: state.model === 'reason' }"
                     @click="state.model = state.model === 'reason' ? 'fast' : 'reason'">
@@ -196,6 +199,7 @@ const state = reactive({
   fontSize: 14,
   theme: "light",
   attachments: [],
+  listening: false,
   knownPoints: [],
 })
 let controller = null
@@ -477,6 +481,43 @@ function exportChat() {
 function toggleTheme() {
   state.theme = state.theme === 'dark' ? 'light' : 'dark'
   try { localStorage.setItem('li_an_xiaozhi_theme', state.theme) } catch (e) { /* ignore */ }
+}
+
+/* ---------- 语音输入（Web Speech API，无第三方依赖） ---------- */
+let recognizer = null
+
+function speechSupported() {
+  const w = window
+  return !!(w.SpeechRecognition || w.webkitSpeechRecognition)
+}
+
+function toggleVoice() {
+  if (!speechSupported()) { flash("当前浏览器不支持语音输入"); return }
+  if (state.listening) {
+    if (recognizer) recognizer.stop()
+    state.listening = false
+    return
+  }
+  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition
+  recognizer = new Ctor()
+  recognizer.lang = "zh-CN"
+  recognizer.interimResults = true
+  recognizer.continuous = false
+  let base = state.input
+  recognizer.onresult = function (e) {
+    let text = ""
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      text += e.results[i][0].transcript
+    }
+    state.input = (base ? base + " " : "") + text
+  }
+  recognizer.onerror = function () { state.listening = false; flash("语音识别失败，请重试") }
+  recognizer.onend = function () { state.listening = false }
+  try {
+    recognizer.start()
+    state.listening = true
+    flash("说话吧，我在听")
+  } catch (e) { state.listening = false }
 }
 
 function pickFile() {
