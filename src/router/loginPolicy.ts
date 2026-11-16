@@ -94,8 +94,11 @@ const DEVICE_TO_PC: Record<string, string> = {
   '/mobile/login': '/login',
   '/tablet/home': '/home',
   '/mobile/home': '/home',
-  '/tablet/question-bank': '/question-bank',
-  '/mobile/question-bank': '/question-bank',
+  // 电脑端题库的**真实**路径是 VTJ 动态路由 /page/question_bank
+  // （exercise.vue / solution.vue 里的「返回题库」就跳这里）；
+  // 写成 /question-bank 会落到 404 —— 2026-11-16 实测踩过。
+  '/tablet/question-bank': '/page/question_bank',
+  '/mobile/question-bank': '/page/question_bank',
   '/tablet/forum': '/forum',
   '/mobile/forum': '/forum',
   '/tablet/practice': '/practice',
@@ -152,6 +155,8 @@ export function devicePathForPcPath(
     '/teacher/scores': `/${prefix}/teacher/scores`,
     '/teacher/forum': `/${prefix}/forum`,
     '/question-import': `/${prefix}/teacher/questions`,
+    // 电脑端题库（VTJ 动态路由）→ 设备端题库；不映射的话手机会看到桌面版题库
+    '/page/question_bank': `/${prefix}/question-bank`,
   }
   if (exact[clean]) return exact[clean]
   // 教师端其它 PC 页（班级/消息/个人/分析）在设备端没有对应页 →
