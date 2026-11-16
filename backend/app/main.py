@@ -45,6 +45,7 @@ from .api.v1.growth import study_plan
 from .api.v1.growth import profile
 from .api.v1.growth import review
 from .api.v1.growth import focus
+from .api.v1.growth import weekly_report
 from .api.v1.reward import coins
 from .api.v1.growth import tasks
 from .api.v1.growth import weekly_task_catalog
@@ -1121,6 +1122,7 @@ app.include_router(llm_xiaozhi.router)  # 小智工作台（流式 + Agent 工�
 app.include_router(study_plan.router)
 app.include_router(review.router)  # 错题遗忘曲线复习（模块4 P4，新增端点）
 app.include_router(focus.router)  # 专注力记录与热力图（模块4 4-1，新增端点）
+app.include_router(weekly_report.router)  # 学习周报（模块4 4-6，新增端点）
 app.include_router(agent.router)
 app.include_router(knowledge.router)
 app.include_router(post.router)
