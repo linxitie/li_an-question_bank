@@ -62,7 +62,10 @@ const VTJ_LOCKED_VERSIONS = {
 // 138 = 136 + 2（2026-11-16 三端登录 P3：教师设备端「题目管理」只读页
 //   /tablet/teacher/questions 与 /mobile/teacher/questions 各 1 条，同一只读组件双端复用；
 //   与 test_route_roles 的 138 同步）
-const EXPECTED_DYNAMIC_IMPORTS = 138;
+// 142 = 138 + 4（2026-11-16 三端登录 P4：教师设备端「试卷」与「成绩概览」只读页，
+//   /tablet|/mobile/teacher/papers、/tablet|/mobile/teacher/scores 共 4 条，
+//   每类页面同一组件双端复用；与 test_route_roles 的 142 同步）
+const EXPECTED_DYNAMIC_IMPORTS = 142;
 
 const violations = [];
 

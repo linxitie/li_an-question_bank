@@ -36,17 +36,17 @@ export const TEACHER_NAV_ITEMS: TeacherNavItem[] = [
     key: 'papers',
     title: '📝 试卷',
     desc: '查看列表与状态',
-    // P3 只交付「题目管理」设备页；试卷/成绩页在 P4 交付，在此之前不放入口，
-    // 避免点了 404（比"入口在但白屏"更糟）。P4 落地后把 status 改回 'ready' 即可。
-    status: 'todo',
-    reason: '设备端页面在下一批（P4）交付；电脑端已可用（/teacher/papers）。',
+    // P4 起设备端有只读列表页（/tablet|/mobile/teacher/papers）
+    status: 'ready',
+    path: '/teacher/papers',
   },
   {
     key: 'scores',
     title: '📊 成绩分析',
-    desc: '班级对比 / 知识点',
-    status: 'todo',
-    reason: '设备端页面在下一批（P4）交付；电脑端已可用（/teacher/scores）。',
+    desc: '班级均分 / 分布 / 名单',
+    // P4 起设备端有只读概览页（/tablet|/mobile/teacher/scores，D-21 选①）
+    status: 'ready',
+    path: '/teacher/scores',
   },
   {
     key: 'paper-edit',

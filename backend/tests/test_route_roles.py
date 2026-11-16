@@ -52,7 +52,11 @@ def test_page_route_count():
     # 134 → 136：2026-11-16 三端登录 P2 新增教师设备端首页 2 条页面路由
     #            （/tablet/teacher/home、/mobile/teacher/home —— 同一手写组件供两端复用，守 R12；
     #             教师端其余功能页在 P3/P4 增。与 verify-modularization-constraints.mjs 的 136 同步）
-    assert len(_pages()) == 138
+    # 136 → 138：2026-11-16 三端登录 P3 新增教师设备端「题目管理」2 条页面路由
+    #            （/tablet/teacher/questions、/mobile/teacher/questions —— 同一只读组件双端复用）
+    # 138 → 142：2026-11-16 三端登录 P4 新增教师设备端「试卷」「成绩概览」4 条页面路由
+    #            （/tablet|/mobile/teacher/papers、/tablet|/mobile/teacher/scores，均只读、组件双端复用）
+    assert len(_pages()) == 142
 
 
 def test_whitelist_has_no_roles():

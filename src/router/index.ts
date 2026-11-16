@@ -497,6 +497,20 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/teacher/shared/TeacherQuestions.vue'),
     meta: { platform: 'tablet', roles: ['teacher'] }
   },
+  {
+    // 教师设备端「试卷」只读列表（P4）：状态可见，组卷/发布仍在电脑端
+    path: '/tablet/teacher/papers',
+    name: 'TabletTeacherPapers',
+    component: () => import('@/views/teacher/shared/TeacherPapers.vue'),
+    meta: { platform: 'tablet', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「成绩概览」只读（P4，D-21 选①：班级均分/分布/名单）
+    path: '/tablet/teacher/scores',
+    name: 'TabletTeacherScores',
+    component: () => import('@/views/teacher/shared/TeacherScores.vue'),
+    meta: { platform: 'tablet', roles: ['teacher'] }
+  },
   // ---- 模块4/7 补齐：平板端复用同一组件（R12）----
   {
     path: '/tablet/profile-quiz',
@@ -710,6 +724,20 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/teacher/questions',
     name: 'MobileTeacherQuestions',
     component: () => import('@/views/teacher/shared/TeacherQuestions.vue'),
+    meta: { platform: 'mobile', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「试卷」只读列表（P4）——与平板共用同一组件（守 R12）
+    path: '/mobile/teacher/papers',
+    name: 'MobileTeacherPapers',
+    component: () => import('@/views/teacher/shared/TeacherPapers.vue'),
+    meta: { platform: 'mobile', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「成绩概览」只读（P4）——与平板共用同一组件（守 R12）
+    path: '/mobile/teacher/scores',
+    name: 'MobileTeacherScores',
+    component: () => import('@/views/teacher/shared/TeacherScores.vue'),
     meta: { platform: 'mobile', roles: ['teacher'] }
   },
   {

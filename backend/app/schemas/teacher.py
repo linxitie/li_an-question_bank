@@ -238,16 +238,23 @@ class QuestionCorrectRate(BaseModel):
 
 
 class StudentScoreItem(BaseModel):
-    """学生成绩明细"""
+    """学生成绩明细
+
+    注意（2026-11-16 修复）：pydantic v2 里 `Optional[float]` **没有默认值仍是必填**。
+    这三个分科分数原先没给默认值，而 `get_score_overview` 又不传它们，
+    结果只要有一条已交卷记录就抛 ValidationError → `/api/teacher/scores/overview` 500。
+    这里补 `= None`（分科分数目前系统未拆分统计，缺失即 None），并补回归测试
+    `tests/test_teacher_scores_overview.py`。
+    """
     rank: int
     user_id: int
     user_no: str
     user_name: str
     class_name: Optional[str]
     total_score: float
-    xingce_score: Optional[float]
-    shenlun_score: Optional[float]
-    police_score: Optional[float]
+    xingce_score: Optional[float] = None
+    shenlun_score: Optional[float] = None
+    police_score: Optional[float] = None
     duration_used: Optional[int]
     submit_time: Optional[str]
 
