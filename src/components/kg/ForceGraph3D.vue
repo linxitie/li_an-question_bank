@@ -43,7 +43,8 @@ function project(p, w, h) {
   let z = p.x * sinY + p.z * cosY
   let y = p.y * cosX - z * sinX
   z = p.y * sinX + z * cosX
-  const scale = (Math.min(w, h) / 5.2) * state.zoom
+  // 节点坐标半径约 260，缩放系数必须与之匹配，否则整张图会跑到视口外
+  const scale = (Math.min(w, h) / 700) * state.zoom
   const depth = 1 + z / 900
   return { sx: w / 2 + x * scale * depth, sy: h / 2 + y * scale * depth, depth: depth, z: z }
 }
@@ -132,7 +133,8 @@ function draw() {
   sorted.forEach(function (n) {
     const p = pos[n.id]
     const r = (n.level === 1 ? 4.2 : n.level === 2 ? 2.2 : 3) * p.depth
-    const weak = n.mastery !== undefined && n.mastery < 0.5
+    // mastery 为 0 / 缺失表示“还没有该考点的数据”，不能当作薄弱，否则整张图全是红的
+    const weak = typeof n.mastery === "number" && n.mastery > 0 && n.mastery < 0.5
     ctx.beginPath()
     ctx.arc(p.sx, p.sy, Math.max(1, r), 0, Math.PI * 2)
     ctx.fillStyle = n.level === 1 ? "#2563eb" : weak ? "#c41e3a" : "rgba(148,163,184,0.9)"
@@ -246,5 +248,9 @@ onBeforeUnmount(function () { if (raf) cancelAnimationFrame(raf) })
 .dot--weak { background: #c41e3a; }
 .fg3d__hint { position: absolute; right: 14px; bottom: 12px; margin: 0; font-size: 11px; color: rgba(255,255,255,0.35); }
 .fg3d__loading, .fg3d__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; color: rgba(255,255,255,0.55); }
-@media (max-width: 768px) { .fg3d { height: 360px; } }
+@media (max-width: 768px) {
+  .fg3d { height: 360px; }
+  .fg3d__hint { display: none; }
+  .fg3d__legend { font-size: 10px; gap: 10px; }
+}
 </style>

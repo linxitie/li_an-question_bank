@@ -134,4 +134,14 @@ async function generateTasks(): Promise<void> {
   cursor: not-allowed;
 }
 .kg-btn.on { background: #1a365d; color: #fff; border-color: #1a365d; }
+
+/* 移动端适配：按钮不能竖排，标题与操作区分行 */
+.kg-btn { white-space: nowrap; writing-mode: horizontal-tb; }
+@media (max-width: 900px) {
+  .kg-head { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .kg-head h1 { font-size: 20px; line-height: 1.3; }
+  .kg-actions { flex-wrap: wrap; width: 100%; }
+  .kg-btn { flex: 0 0 auto; padding: 7px 12px; font-size: 12px; }
+  .kg-stage .kg-panel { position: static; width: auto; margin-top: 12px; max-height: none; }
+}
 </style>
