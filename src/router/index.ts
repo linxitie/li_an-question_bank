@@ -490,6 +490,13 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/teacher/shared/TeacherHome.vue'),
     meta: { platform: 'tablet', roles: ['teacher'] }
   },
+  {
+    // 教师设备端「题目管理」只读列表（P3）；与 /teacher/questions 同一数据源，写操作仍在电脑端
+    path: '/tablet/teacher/questions',
+    name: 'TabletTeacherQuestions',
+    component: () => import('@/views/teacher/shared/TeacherQuestions.vue'),
+    meta: { platform: 'tablet', roles: ['teacher'] }
+  },
   // ---- 模块4/7 补齐：平板端复用同一组件（R12）----
   {
     path: '/tablet/profile-quiz',
@@ -696,6 +703,13 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/teacher/home',
     name: 'MobileTeacherHome',
     component: () => import('@/views/teacher/shared/TeacherHome.vue'),
+    meta: { platform: 'mobile', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「题目管理」只读列表（P3）——与平板共用同一组件（守 R12）
+    path: '/mobile/teacher/questions',
+    name: 'MobileTeacherQuestions',
+    component: () => import('@/views/teacher/shared/TeacherQuestions.vue'),
     meta: { platform: 'mobile', roles: ['teacher'] }
   },
   {
