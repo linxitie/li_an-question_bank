@@ -787,18 +787,23 @@ function handleLogout() {
 @media (max-width: 900px) {
   .insights-bar { padding: 14px 16px 0; }
 }
+/* 2026-11-17：改为整页单一滚动。
+   原先「两栏各自滚动」在鼠标悬停于栏内时滚的是内层，页面本身不动，
+   用户体感就是「翻不了页」。 */
 .profile-main {
-  height: calc(100vh - 64px);
-  overflow: hidden;
-  align-items: stretch;
+  height: auto;
+  overflow: visible;
+  align-items: start;
 }
 .side-col {
-  height: 100%;
+  height: auto;
   max-height: none;
+  overflow: visible;
+  position: static;
 }
 .center-col {
-  height: 100%;
-  overflow-y: auto;
+  height: auto;
+  overflow: visible;
   padding-right: 6px;
 }
 </style>
