@@ -140,19 +140,6 @@
           </div>
         </div>
 
-        <!-- 3D学习日历 -->
-        <div class="calendar-3d-card">
-          <div class="dist-title">📅 3D学习日历</div>
-          <div class="calendar-3d-wrap">
-            <div class="calendar-3d">
-              <div v-for="day in 30" :key="day" class="calendar-day"
-                :class="{ done: day < 20, today: day === 15 }">
-                {{ day }}
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- 智能排课 -->
         <div class="smart-schedule-card">
           <div class="dist-title">⏰ 智能排课 · 今日时间表</div>
@@ -299,91 +286,6 @@
           </div>
         </div>
 
-        <!-- 遗忘曲线复习提醒 -->
-        <div class="review-card">
-          <div class="review-head">
-            <span class="dist-title">🧠 遗忘曲线复习</span>
-            <span class="review-badge">3个待复习</span>
-          </div>
-          <div class="review-list">
-            <div class="review-item">
-              <div class="review-info">
-                <div class="review-topic">资料分析-增长率</div>
-                <div class="review-desc">1天前学过，现在复习最佳</div>
-              </div>
-              <button class="review-btn">去复习</button>
-            </div>
-            <div class="review-item">
-              <div class="review-info">
-                <div class="review-topic">判断推理-图形推理</div>
-                <div class="review-desc">3天前学过，现在复习最佳</div>
-              </div>
-              <button class="review-btn">去复习</button>
-            </div>
-            <div class="review-item">
-              <div class="review-info">
-                <div class="review-topic">言语理解-逻辑填空</div>
-                <div class="review-desc">7天前学过，现在复习最佳</div>
-              </div>
-              <button class="review-btn">去复习</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 自适应学习推荐 -->
-        <div class="adaptive-card">
-          <div class="adaptive-head">
-            <span class="dist-title">🤖 自适应学习推荐</span>
-            <span class="adaptive-badge">AI</span>
-          </div>
-          <div class="adaptive-body">
-            <div class="adaptive-tip">
-              <div class="adaptive-tip-icon">📈</div>
-              <div class="adaptive-tip-text">
-                <div class="adaptive-tip-title">建议提升难度</div>
-                <div class="adaptive-tip-desc">你最近答对率85%，可以挑战更难的题目</div>
-              </div>
-            </div>
-            <div class="adaptive-tip">
-              <div class="adaptive-tip-icon">📉</div>
-              <div class="adaptive-tip-text">
-                <div class="adaptive-tip-title">建议巩固基础</div>
-                <div class="adaptive-tip-desc">资料分析正确率偏低，建议先练基础题</div>
-              </div>
-            </div>
-            <button class="adaptive-btn">开始自适应练习</button>
-          </div>
-        </div>
-
-        <!-- AI错题本 -->
-        <div class="wrongbook-card">
-          <div class="wrongbook-head">
-            <span class="dist-title">📕 AI错题本</span>
-            <span class="wrongbook-badge">23道错题</span>
-          </div>
-          <div class="wrongbook-body">
-            <div class="wrongbook-stats">
-              <div class="wb-stat">
-                <div class="wb-num">12</div>
-                <div class="wb-label">资料分析</div>
-              </div>
-              <div class="wb-stat">
-                <div class="wb-num">8</div>
-                <div class="wb-label">判断推理</div>
-              </div>
-              <div class="wb-stat">
-                <div class="wb-num">3</div>
-                <div class="wb-label">言语理解</div>
-              </div>
-            </div>
-            <div class="wrongbook-tip">
-              <span class="wb-tip-icon">💡</span>
-              <span>AI分析：你资料分析的增长率题型错得最多，建议重点复习</span>
-            </div>
-            <button class="wrongbook-btn">开始错题重做</button>
-          </div>
-        </div>
-
         <!-- 本周进度 -->
         <div class="week-progress">
           <div class="dist-title">📅 本周打卡</div>
@@ -420,92 +322,6 @@
           </div>
         </div>
 
-        <!-- 番茄钟专注记录 -->
-        <div class="pomodoro-card">
-          <div class="pomodoro-head">
-            <span class="section-title">⏱️ 番茄钟专注</span>
-            <span class="pomodoro-today">今日专注 {{ state.pomodoro.minutes }} 分钟</span>
-          </div>
-          <div class="pomodoro-body">
-            <div class="pomodoro-display" :class="{ running: state.pomodoro.running, break: state.pomodoro.isBreak }">
-              <div class="pomodoro-time">{{ formatTime(state.pomodoro.seconds) }}</div>
-              <div class="pomodoro-mode">{{ state.pomodoro.isBreak ? '休息时间' : '专注时间' }}</div>
-            </div>
-            <div class="pomodoro-controls">
-              <button class="pomodoro-btn primary" @click="togglePomodoro">
-                {{ state.pomodoro.running ? '暂停' : '开始' }}
-              </button>
-              <button class="pomodoro-btn" @click="resetPomodoro">重置</button>
-            </div>
-            <div class="pomodoro-stats">
-              <div class="ps-item">
-                <div class="ps-num">{{ state.pomodoro.completed }}</div>
-                <div class="ps-label">已完成番茄</div>
-              </div>
-              <div class="ps-item">
-                <div class="ps-num">25:00</div>
-                <div class="ps-label">单番茄时长</div>
-              </div>
-              <div class="ps-item">
-                <div class="ps-num">5:00</div>
-                <div class="ps-label">休息时长</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 学习报告（周/月） -->
-        <div v-if="state.plan" class="report-card">
-          <div class="report-head">
-            <span class="section-title">📈 学习报告</span>
-            <div class="report-tabs">
-              <div class="report-tab" :class="{ active: state.report.period === 'week' }" @click="setReportPeriod('week')">本周</div>
-              <div class="report-tab" :class="{ active: state.report.period === 'month' }" @click="setReportPeriod('month')">本月</div>
-            </div>
-          </div>
-
-          <div class="report-grid">
-            <div class="report-item">
-              <div class="report-num">{{ rpt.minutes }}</div>
-              <div class="report-label">学习时长(分)</div>
-            </div>
-            <div class="report-item">
-              <div class="report-num">{{ rpt.questions }}</div>
-              <div class="report-label">完成题量</div>
-            </div>
-            <div class="report-item">
-              <div class="report-num">{{ rpt.accuracy }}%</div>
-              <div class="report-label">平均正确率</div>
-            </div>
-            <div class="report-item">
-              <div class="report-num">🔥 {{ rpt.streak }}</div>
-              <div class="report-label">连续打卡</div>
-            </div>
-          </div>
-
-          <div class="report-trend">
-            <div class="report-trend-title">正确率趋势</div>
-            <div class="report-bars">
-              <div v-for="(v, i) in rpt.trend" :key="i" class="report-bar-col">
-                <div class="report-bar" :style="{ height: v + '%' }"></div>
-                <div class="report-bar-label">{{ rpt.labels[i] }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="report-weak">
-            <div class="report-weak-title">薄弱科目 Top3</div>
-            <div v-for="w in rpt.weak" :key="w.name" class="report-weak-row">
-              <span class="report-weak-name">{{ w.name }}</span>
-              <div class="report-weak-bar"><div class="report-weak-fill" :style="{ width: w.rate + '%' }"></div></div>
-              <span class="report-weak-rate">{{ w.rate }}%</span>
-            </div>
-          </div>
-
-          <div class="report-comment">💬 {{ rpt.comment }}</div>
-          <button class="report-print-btn" @click="printReport">🖨️ 导出 / 打印报告</button>
-        </div>
-
         <!-- AI 提示 -->
         <div v-if="state.plan.tips" class="tips-card">
           <div class="tips-icon">💡</div>
@@ -539,6 +355,7 @@
   import { defineComponent, reactive, onMounted, computed } from 'vue';
   import ProfileQuizInline from '@/components/plan/ProfileQuizInline.vue';
   import NavBar from './navbar.vue';
+  import { bindTaskFeedback } from '@/composables/useTaskFeedback';
 
   export default defineComponent({
     name: 'StudyPlan',
@@ -973,6 +790,8 @@
       }
 
       onMounted(async () => {
+        // 任务勾选反馈（4-5）：音效 + 卡片弹动，模板零改动
+        bindTaskFeedback();
         try {
           const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/current');
           const data = await res.json();

@@ -1,5 +1,17 @@
 <template>
-  <section v-if="state.ready && state.total > 0" class="due-review">
+  <!-- 没有错题时也要给引导，否则用户根本不知道有复习功能 -->
+  <section v-if="state.ready && state.total === 0" class="due-review due-review--empty">
+    <div class="due-review__main">
+      <div class="due-review__icon">🔁</div>
+      <div class="due-review__text">
+        <p class="due-review__title">遗忘曲线复习</p>
+        <p class="due-review__sub">答题后错题会自动排进复习计划，这里会提醒你哪天该看哪道</p>
+      </div>
+    </div>
+    <button class="due-review__cta ghost" @click="goPractice">去刷题</button>
+  </section>
+
+  <section v-else-if="state.ready && state.total > 0" class="due-review">
     <div class="due-review__main">
       <div class="due-review__icon">🔁</div>
       <div class="due-review__text">
@@ -55,6 +67,10 @@ async function load() {
   finally { state.ready = true }
 }
 
+function goPractice() {
+  location.hash = "#/question-bank"
+}
+
 function goReview() {
   location.hash = "#/wrong-questions"
 }
@@ -80,5 +96,8 @@ onMounted(load)
   transition: transform 140ms ease, opacity 140ms ease;
 }
 .due-review__cta:disabled { background: #f3c7cf; cursor: default; }
+.due-review--empty { background: #fbfcfe; border-color: #eef1f7; }
+.due-review--empty .due-review__title { color: #4b5563; }
+.due-review__cta.ghost { background: #fff; color: #4d6bfe; border: 1px solid #dbe2ff; }
 .due-review__cta:not(:disabled):hover { transform: translateY(-1px); }
 </style>

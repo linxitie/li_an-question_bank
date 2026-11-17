@@ -1,7 +1,7 @@
 <template>
   <div class="pomo" :class="{ 'pomo--open': open, 'pomo--running': state.running }">
     <!-- 收起态：圆形气泡 -->
-    <button v-if="!open" class="pomo__bubble" @click="open = true" :title="'番茄钟 ' + display">
+    <button v-if="!open" class="pomo__bubble" @click="open = true; refreshOnOpen()" :title="'番茄钟 ' + display">
       <span class="pomo__bubble-icon">🍅</span>
       <span class="pomo__bubble-time">{{ display }}</span>
     </button>
@@ -31,7 +31,7 @@
       </div>
 
       <div class="pomo__foot">
-        <span>今日专注 {{ state.sessionsToday }} 次</span>
+        <span>今日 {{ state.minutesToday }} 分钟</span>
         <button class="pomo__switch" @click="switchMode">
           {{ state.mode === 'focus' ? '切到休息' : '切回专注' }}
         </button>
@@ -63,6 +63,7 @@ const state = reactive({
   running: false,
   remain: FOCUS_MIN * 60,
   sessionsToday: 0,
+  minutesToday: 0,   // 服务端统计的今日专注分钟（含其它端）
 })
 let timer = null
 let endAt = 0
@@ -171,6 +172,8 @@ async function finish() {
 
   if (state.mode === 'focus') {
     state.sessionsToday += 1
+    await recordFocus(FOCUS_MIN)
+    state.minutesToday += FOCUS_MIN
     await autoCheckin()
     // 自动进入 5 分钟休息
     state.mode = 'break'
@@ -192,6 +195,19 @@ function getToken() {
   return localStorage.getItem('token') || ''
 }
 
+/** 专注结束写一条记录，供专注力热力图统计 */
+async function recordFocus(minutes) {
+  const token = getToken()
+  if (!token) return
+  try {
+    await fetch("/api/v1/growth/focus/record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ minutes: minutes, mode: "focus", source: "widget" }),
+    })
+  } catch (e) { /* 网络失败不影响计时 */ }
+}
+
 /** 专注结束顺手补签到：接口本身幂等，已签不会重复发奖 */
 async function autoCheckin() {
   const token = getToken()
@@ -206,6 +222,11 @@ async function autoCheckin() {
       headers: { Authorization: 'Bearer ' + token },
     })
   } catch (e) { /* 网络失败静默，不打断专注 */ }
+}
+
+function refreshOnOpen() {
+  // 挂件挂在 App 根级，挂载时用户可能还没登录；每次展开都补拉一次
+  loadTodayMinutes()
 }
 
 function openImmersive() {
@@ -227,7 +248,33 @@ function onImmersiveFinish() {
   finish()
 }
 
-onMounted(() => { restore() })
+/** 从服务端拉今日专注分钟，保证多端一致 */
+async function loadTodayMinutes() {
+  const token = getToken()
+  if (!token) return
+  try {
+    const res = await fetch("/api/v1/growth/focus/heatmap?weeks=1", {
+      headers: { Authorization: "Bearer " + token },
+    })
+    const d = await res.json()
+    const key = new Date().toISOString().slice(0, 10)
+    const local = new Date()
+    const localKey = local.getFullYear() + "-" + String(local.getMonth() + 1).padStart(2, "0") + "-" + String(local.getDate()).padStart(2, "0")
+    const daily = d.daily || {}
+    state.minutesToday = Number(daily[localKey] || daily[key] || 0)
+  } catch (e) { /* 静默 */ }
+}
+
+onMounted(() => {
+  restore()
+  let tries = 0
+  const tick = setInterval(() => {
+    tries += 1
+    loadTodayMinutes()
+    if (tries >= 10 || state.minutesToday > 0) clearInterval(tick)
+  }, 3000)
+  loadTodayMinutes()
+})
 onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 </script>
 

@@ -43,7 +43,8 @@ function project(p, w, h) {
   let z = p.x * sinY + p.z * cosY
   let y = p.y * cosX - z * sinX
   z = p.y * sinX + z * cosX
-  const scale = (Math.min(w, h) / 5.2) * state.zoom
+  // 节点坐标半径约 260，缩放系数必须与之匹配，否则整张图会跑到视口外
+  const scale = (Math.min(w, h) / 700) * state.zoom
   const depth = 1 + z / 900
   return { sx: w / 2 + x * scale * depth, sy: h / 2 + y * scale * depth, depth: depth, z: z }
 }
@@ -88,10 +89,16 @@ function tick() {
     a.vx += (dx / d) * f; a.vy += (dy / d) * f; a.vz += (dz / d) * f
     b.vx -= (dx / d) * f; b.vy -= (dy / d) * f; b.vz -= (dz / d) * f
   })
+  const LIMIT = 300  // 越界钳制：防止力导后期把球体顶出画布
   nodes.forEach(function (n) {
     n.vx -= n.x * 0.0016; n.vy -= n.y * 0.0016; n.vz -= n.z * 0.0016
     n.vx *= 0.86; n.vy *= 0.86; n.vz *= 0.86
     n.x += n.vx; n.y += n.vy; n.z += n.vz
+    const len = Math.sqrt(n.x * n.x + n.y * n.y + n.z * n.z)
+    if (len > LIMIT) {
+      const k = LIMIT / len
+      n.x *= k; n.y *= k; n.z *= k
+    }
   })
 }
 
@@ -106,7 +113,9 @@ function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, w, h)
 
-  if (!reduced && ticks < 260) { tick(); ticks += 1 }
+  // 窄屏节点多、O(n^2) 逐帧计算代价高，收敛帧数按视口降档
+  const tickBudget = window.innerWidth < 768 ? 140 : 260
+  if (!reduced && ticks < tickBudget) { tick(); ticks += 1 }
 
   const pos = {}
   state.nodes.forEach(function (n) {
@@ -132,7 +141,8 @@ function draw() {
   sorted.forEach(function (n) {
     const p = pos[n.id]
     const r = (n.level === 1 ? 4.2 : n.level === 2 ? 2.2 : 3) * p.depth
-    const weak = n.mastery !== undefined && n.mastery < 0.5
+    // mastery 为 0 / 缺失表示“还没有该考点的数据”，不能当作薄弱，否则整张图全是红的
+    const weak = typeof n.mastery === "number" && n.mastery > 0 && n.mastery < 0.5
     ctx.beginPath()
     ctx.arc(p.sx, p.sy, Math.max(1, r), 0, Math.PI * 2)
     ctx.fillStyle = n.level === 1 ? "#2563eb" : weak ? "#c41e3a" : "rgba(148,163,184,0.9)"
@@ -169,14 +179,33 @@ function onClick(e) {
   const mx = e.clientX - rect.left
   const my = e.clientY - rect.top
   let best = null
-  let bestD = 16
+  // 命中半径随视口放宽：球体缩小后节点密集，16px 实测点不中，改为 30px 起步
+  let bestD = Math.max(30, Math.min(48, rect.width / 30))
+  let bestProjected = null
   state.nodes.forEach(function (n) {
     const p = project(n, rect.width, rect.height)
     const d = Math.hypot(p.sx - mx, p.sy - my)
-    if (d < bestD) { bestD = d; best = n }
+    if (d < bestD) { bestD = d; best = n; bestProjected = p }
   })
   state.nodes.forEach(function (n) { n.hover = n === best })
-  if (best) emit("select", best)
+  if (best) {
+    // 带上一跳邻居，供外层做下钻面板
+    const neighbors = state.edges
+      .filter(function (e) { return e.source === best.id || e.target === best.id })
+      .map(function (e) {
+        const otherId = e.source === best.id ? e.target : e.source
+        const other = state.nodes.find(function (n) { return n.id === otherId })
+        return other ? { id: other.id, name: other.name, rel: e.rel } : null
+      })
+      .filter(Boolean)
+    emit("select", {
+      id: best.id,
+      name: best.name,
+      level: best.level,
+      degree: neighbors.length,
+      neighbors: neighbors.slice(0, 12),
+    })
+  }
 }
 
 function token() {
@@ -229,5 +258,9 @@ onBeforeUnmount(function () { if (raf) cancelAnimationFrame(raf) })
 .dot--weak { background: #c41e3a; }
 .fg3d__hint { position: absolute; right: 14px; bottom: 12px; margin: 0; font-size: 11px; color: rgba(255,255,255,0.35); }
 .fg3d__loading, .fg3d__empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; color: rgba(255,255,255,0.55); }
-@media (max-width: 768px) { .fg3d { height: 360px; } }
+@media (max-width: 768px) {
+  .fg3d { height: 360px; }
+  .fg3d__hint { display: none; }
+  .fg3d__legend { font-size: 10px; gap: 10px; }
+}
 </style>

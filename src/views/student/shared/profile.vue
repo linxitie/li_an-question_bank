@@ -2,7 +2,29 @@
 <template>
   <div class="profile-page">
     <div class="profile-nav"><NavBar /></div>
+    <!-- 顶部洞察区：放在两栏容器之外，否则会被 100vh + overflow:hidden 裁掉（用户反馈「翻不了页」） -->
+    <section class="insights-bar">
+      <OnboardingChecklist />
+
+      <div class="top-insights">
+        <WeeklyReportCard />
+        <PlanDiffPanel />
+      </div>
+
+      <!-- 快捷入口：导航只保留五项，这些功能从这里进 -->
+      <nav class="quick-links">
+        <button v-for="l in quickLinks" :key="l.path" class="quick-link" @click="go(l.path)">
+          <span class="quick-link__icon">{{ l.icon }}</span>
+          <span class="quick-link__label">{{ l.label }}</span>
+          <span class="quick-link__desc">{{ l.desc }}</span>
+        </button>
+      </nav>
+    </section>
+
     <main class="profile-main">
+      <!-- 顶部：学习周报 + 方案版本对比（主区第一屏可见） -->
+
+
       <!-- 左栏：个人资料 + 成就/等级/设置 -->
       <div class="side-col">
       <aside class="left-col">
@@ -299,6 +321,16 @@ import NavBar from '$vtj/vue/navbar.vue';
 import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
 import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
 import ProfileRadar from '@/components/profile/ProfileRadar.vue';
+import WeeklyReportCard from '@/components/growth/WeeklyReportCard.vue';
+import PlanDiffPanel from '@/components/plan/PlanDiffPanel.vue';
+import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist.vue';
+
+const quickLinks = [
+  { path: '/wrong-questions', icon: '📕', label: '错题集', desc: '错题与复习排程' },
+  { path: '/student/knowledge/graph', icon: '🕸️', label: '知识图谱', desc: '考点关系地图' },
+  { path: '/study-plan', icon: '📋', label: '学习计划', desc: '方案与今日任务' },
+  { path: '/ai-studio', icon: '💬', label: '联考小智', desc: '问问题 / 作文批改' },
+]
 // 学习分布（科目占比 + 对错比例）与错题知识点：数据来自 P2 新增的两个只读聚合端点
 import SubjectDistributionCard from '@/components/domain/SubjectDistributionCard.vue';
 import WrongPointStatsCard from '@/components/domain/WrongPointStatsCard.vue';
@@ -585,6 +617,37 @@ function handleLogout() {
   gap: 20px;
   align-items: start;
 }
+/* 顶部洞察区：跨两列铺满，第一屏就能看到周报与版本对比 */
+.top-insights {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 1024px) {
+  .top-insights { grid-template-columns: 1fr; }
+}
+/* 快捷入口：导航固定五项，这些功能从这里进 */
+.quick-links {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.quick-link {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 14px 16px; border-radius: 12px; border: 1px solid #eef1f7;
+  background: #fff; cursor: pointer; text-align: left;
+  transition: border-color .18s ease, transform .18s ease;
+}
+.quick-link:hover { border-color: #c9d4ff; transform: translateY(-2px); }
+.quick-link__icon { font-size: 18px; }
+.quick-link__label { font-size: 13.5px; font-weight: 700; color: #1a2b5f; }
+.quick-link__desc { font-size: 11.5px; color: #8a8faa; }
+@media (max-width: 1024px) {
+  .quick-links { grid-template-columns: repeat(2, 1fr); }
+}
 .side-col {
   position: sticky;
   top: 76px;
@@ -713,18 +776,34 @@ function handleLogout() {
 .deco-chip.is-expired .deco-expire { color: #dc2626; }
 
 /* 2026-11-07：左右两栏各自独立滚动，顶部导航固定后可收纳更多内容 */
+.insights-bar {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 20px 32px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .insights-bar { padding: 14px 16px 0; }
+}
+/* 2026-11-17：改为整页单一滚动。
+   原先「两栏各自滚动」在鼠标悬停于栏内时滚的是内层，页面本身不动，
+   用户体感就是「翻不了页」。 */
 .profile-main {
-  height: calc(100vh - 64px);
-  overflow: hidden;
-  align-items: stretch;
+  height: auto;
+  overflow: visible;
+  align-items: start;
 }
 .side-col {
-  height: 100%;
+  height: auto;
   max-height: none;
+  overflow: visible;
+  position: static;
 }
 .center-col {
-  height: 100%;
-  overflow-y: auto;
+  height: auto;
+  overflow: visible;
   padding-right: 6px;
 }
 </style>

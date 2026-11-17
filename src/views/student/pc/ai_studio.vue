@@ -77,15 +77,23 @@
             </div>
 
             <div class="xz-msg__text" v-html="render(m.content)"></div>
+
+            <!-- 溯源气泡：回答里出现的考点，可点开查看 -->
+            <div v-if="m.role === 'assistant' && traceOf(m.content).length" class="trace">
+              <span class="trace__label">涉及考点</span>
+              <button v-for="p in traceOf(m.content)" :key="p.id" class="trace__chip" @click="openPoint(p)">
+                {{ p.name }}
+              </button>
+            </div>
             <span v-if="m.streaming" class="cursor"></span>
 
             <div v-if="!m.streaming && m.content" class="xz-msg__ops">
-              <button title="复制" @click="copyText(m.content)">⧉</button>
-              <button v-if="m.role === 'assistant'" title="重新生成" @click="regenerate(i)">↻</button>
-              <button v-if="m.role === 'user'" title="编辑重发" @click="editMessage(i)">✎</button>
-              <button v-if="m.role === 'assistant'" title="有帮助" :class="{ on: m.rated === 'up' }" @click="feedback(m, true)">👍</button>
-              <button v-if="m.role === 'assistant'" title="没帮助" :class="{ on: m.rated === 'down' }" @click="feedback(m, false)">👎</button>
-              <button title="删除" @click="delMessage(i)">🗑</button>
+              <button title="复制" aria-label="复制这条回复" @click="copyText(m.content)">⧉</button>
+              <button v-if="m.role === 'assistant'" title="重新生成" aria-label="重新生成回复" @click="regenerate(i)">↻</button>
+              <button v-if="m.role === 'user'" title="编辑重发" aria-label="编辑并重发" @click="editMessage(i)">✎</button>
+              <button v-if="m.role === 'assistant'" title="有帮助" aria-label="这条回答有帮助" :class="{ on: m.rated === 'up' }" @click="feedback(m, true)">👍</button>
+              <button v-if="m.role === 'assistant'" title="没帮助" aria-label="这条回答没帮助" :class="{ on: m.rated === 'down' }" @click="feedback(m, false)">👎</button>
+              <button title="删除" aria-label="删除这条消息" @click="delMessage(i)">🗑</button>
             </div>
           </div>
         </div>
@@ -101,11 +109,16 @@
           </span>
         </div>
         <div class="composer" :class="{ 'has-text': state.input.trim() }">
-          <textarea ref="inputRef" v-model="state.input" class="composer__input" rows="1"
+          <textarea ref="inputRef" v-model="state.input" class="composer__input" rows="1" aria-label="给联考小智发送消息"
                     :placeholder="state.mode === 'agent' ? '交给小智去做…' : '给联考小智发送消息'"
                     @keydown.enter.exact.prevent="send()"></textarea>
           <div class="composer__bar">
-            <button class="chip chip--icon" title="添加附件（图片 / PDF / 文档）" @click="pickFile">📎</button>
+            <button class="chip chip--icon" title="添加附件（图片 / PDF / 文档）" aria-label="添加附件" @click="pickFile">📎</button>
+            <button class="chip chip--icon" :class="{ on: state.listening }"
+                    :title="state.listening ? '正在听…点一下停止' : '语音输入'"
+                    :aria-label="state.listening ? '停止语音输入' : '开始语音输入'"
+                    :aria-pressed="state.listening"
+                    @click="toggleVoice">{{ state.listening ? "●" : "🎤" }}</button>
             <input id="xz-file" type="file" multiple class="xz-file" @change="onFileChange" />
             <button class="chip" :class="{ on: state.model === 'reason' }"
                     @click="state.model = state.model === 'reason' ? 'fast' : 'reason'">
@@ -125,6 +138,15 @@
     </main>
 
     <!-- 设置抽屉 -->
+    <div v-if="pointDrawer.open" class="xz-drawer" @click.self="pointDrawer.open = false">
+      <div class="xz-drawer__panel">
+        <h3>{{ pointDrawer.name }}</h3>
+        <p class="xz-drawer__note">来自知识图谱的知识点节点</p>
+        <a class="xz-drawer__link" :href="'#/knowledge'" @click="pointDrawer.open = false">在地图里查看 →</a>
+        <button class="xz-drawer__close" @click="pointDrawer.open = false">关闭</button>
+      </div>
+    </div>
+
     <div v-if="settingsOpen" class="xz-drawer" @click.self="settingsOpen = false">
       <div class="xz-drawer__panel">
         <h3>设置</h3>
@@ -142,6 +164,9 @@
       </div>
     </div>
 
+    <!-- 申论作文批改：挂在联考小智里（原在学习计划页，与模块主题不符） -->
+    <EssayReviewPanel />
+
     <transition name="fade">
       <div v-if="toast" class="xz-toast">{{ toast }}</div>
     </transition>
@@ -150,6 +175,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue"
+import EssayReviewPanel from '@/components/assistant/EssayReviewPanel.vue'
 
 /* ===== 联考小智 · 工作台 ===== */
 const STORE_KEY = "li_an_xiaozhi_v3"
@@ -168,6 +194,7 @@ const sessions = ref([])
 const query = ref("")
 const showJump = ref(false)
 const toast = ref("")
+const pointDrawer = ref({ open: false, name: "", id: null })
 const state = reactive({
   sessionId: "",
   mode: "chat",        // chat | agent
@@ -178,6 +205,8 @@ const state = reactive({
   fontSize: 14,
   theme: "light",
   attachments: [],
+  listening: false,
+  knownPoints: [],
 })
 let controller = null
 
@@ -460,6 +489,43 @@ function toggleTheme() {
   try { localStorage.setItem('li_an_xiaozhi_theme', state.theme) } catch (e) { /* ignore */ }
 }
 
+/* ---------- 语音输入（Web Speech API，无第三方依赖） ---------- */
+let recognizer = null
+
+function speechSupported() {
+  const w = window
+  return !!(w.SpeechRecognition || w.webkitSpeechRecognition)
+}
+
+function toggleVoice() {
+  if (!speechSupported()) { flash("当前浏览器不支持语音输入"); return }
+  if (state.listening) {
+    if (recognizer) recognizer.stop()
+    state.listening = false
+    return
+  }
+  const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition
+  recognizer = new Ctor()
+  recognizer.lang = "zh-CN"
+  recognizer.interimResults = true
+  recognizer.continuous = false
+  let base = state.input
+  recognizer.onresult = function (e) {
+    let text = ""
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      text += e.results[i][0].transcript
+    }
+    state.input = (base ? base + " " : "") + text
+  }
+  recognizer.onerror = function () { state.listening = false; flash("语音识别失败，请重试") }
+  recognizer.onend = function () { state.listening = false }
+  try {
+    recognizer.start()
+    state.listening = true
+    flash("说话吧，我在听")
+  } catch (e) { state.listening = false }
+}
+
 function pickFile() {
   const el = document.getElementById("xz-file")
   if (el) el.click()
@@ -589,7 +655,69 @@ function stop() { if (controller) controller.abort() }
 
 watch(function () { return state.sessionId }, function () { scrollBottom() })
 
+/** 从知识图谱拉一份考点名词典，用于回答里的溯源气泡 */
+async function loadKnownPoints() {
+  const t = token()
+  if (!t) return
+  try {
+    const res = await fetch("/api/knowledge/kg/global?limit=800", {
+      headers: { Authorization: "Bearer " + t },
+    })
+    const d = await res.json()
+    const raw = (d.nodes || [])
+      .map(function (n) { return { id: n.point_id, name: String(n.point_name || "") } })
+      .filter(function (p) { return p.name.length >= 2 })
+    // 考点名常含「与/的」等连接词，回答里往往只说其中一段（如「二十大精神」），
+    // 因此额外拆出别名，提高命中率；别名只用于匹配，展示仍用全名。
+    const expanded = []
+    raw.forEach(function (p) {
+      // 全名本身作为一条；别名额外加入，但都指向同一个考点 id 与全名
+      expanded.push({ id: p.id, name: p.name, canonical: p.name })
+      const parts = p.name.split(/与|的|、|，/)
+      if (parts.length > 1) {
+        parts.forEach(function (part) {
+          if (part.length >= 4) expanded.push({ id: p.id, name: part, canonical: p.name })
+        })
+      }
+    })
+    state.knownPoints = expanded
+  } catch (e) { /* 静默：没有词典就不显示气泡 */ }
+}
+
+/**
+ * 在回答文本里找出命中的考点，最多 6 个。
+ * 流式输出时正文每帧都变，若每次都全量比对 600+ 考点会卡；
+ * 这里按「文本长度 + 首尾字符」做一次轻量缓存，同一段文字只算一次。
+ */
+const traceCache = new Map()
+function traceOf(content) {
+  if (!content || !state.knownPoints.length) return []
+  const text = String(content)
+  const key = text.length + "|" + text.slice(0, 8) + "|" + text.slice(-8)
+  const hit = traceCache.get(key)
+  if (hit) return hit
+  const seen = {}
+  const out = []
+  for (const p of state.knownPoints) {
+    // 同一考点只出一次；命中别名时展示全名，避免出现「二十大精神」与「党的二十大的精神」两条
+    if (seen[p.id]) continue
+    if (text.indexOf(p.name) >= 0) {
+      seen[p.id] = true
+      out.push({ id: p.id, name: p.canonical || p.name })
+      if (out.length >= 6) break
+    }
+  }
+  if (traceCache.size > 200) traceCache.clear()
+  traceCache.set(key, out)
+  return out
+}
+
+function openPoint(p) {
+  pointDrawer.value = { open: true, name: p.name, id: p.id }
+}
+
 onMounted(function () {
+  loadKnownPoints()
   try {
     const t = localStorage.getItem("li_an_xiaozhi_theme")
     if (t === "dark" || t === "light") state.theme = t

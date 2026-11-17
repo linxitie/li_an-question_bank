@@ -18,6 +18,7 @@
       </section>
       <section class="plan-section">
         <StudyPlanCard variant="home" />
+        <FocusHeatmap />
       </section>
       <section class="study-materials-section">
         <StudyMaterialsEntry></StudyMaterialsEntry>
@@ -131,8 +132,6 @@
       </footer>
     </main>
 
-    <!-- 番茄钟小窗（模块4 P3）：固定在右下角，专注结束顺手补签到 -->
-    <PomodoroWidget />
   </div>
 </template>
 <script lang="ts">
@@ -154,6 +153,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
   import RecruitmentRadarEntry from '@/components/recruitment/RecruitmentRadarEntry.vue';
   import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
   import PomodoroWidget from '@/components/focus/PomodoroWidget.vue';
+  import FocusHeatmap from '@/components/focus/FocusHeatmap.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
   import { useCheckinStore } from '@/modules/checkin/store';
@@ -206,6 +206,7 @@ import { createRecruitmentRefresher } from '@/utils/recruitmentRefresh';
       RecruitmentRadarEntry,
       StudyPlanCard,
       PomodoroWidget,
+      FocusHeatmap,
       XIcon
     },
     setup(props) {

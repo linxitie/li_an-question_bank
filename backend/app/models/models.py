@@ -3381,3 +3381,37 @@ class JobParseRun(Base):
     model = Column(String(100))
     error = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
+
+class FocusRecord(Base):
+    """番茄钟专注记录（模块4 · 4-1 专注力热力图的数据源）"""
+    __tablename__ = "focus_record"
+
+    record_id = Column(Integer, primary_key=True, autoincrement=True, comment="记录ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    started_at = Column(DateTime, nullable=False, comment="本次专注开始时间")
+    ended_at = Column(DateTime, nullable=False, comment="本次专注结束时间")
+    minutes = Column(Integer, default=0, comment="实际专注分钟数")
+    mode = Column(String(10), default="focus", comment="focus/break")
+    source = Column(String(20), default="widget", comment="来源 widget/immersive/plan")
+    created_at = Column(DateTime, default=datetime.now, comment="写入时间")
+
+    __table_args__ = (
+        Index("idx_focus_user_time", user_id, started_at),
+        {"sqlite_autoincrement": True},
+    )
+
+class StudyPlanSnapshot(Base):
+    """备考方案版本快照（模块4 · 7-4 双栏 diff 的数据基础）"""
+    __tablename__ = "study_plan_snapshot"
+
+    snapshot_id = Column(Integer, primary_key=True, autoincrement=True, comment="快照ID")
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    plan_id = Column(Integer, nullable=True, comment="所属计划ID")
+    version = Column(Integer, default=1, comment="同计划内的版本号")
+    payload = Column(Text, comment="快照内容JSON(summary/phases/tasks)")
+    task_count = Column(Integer, default=0, comment="快照内任务数")
+    created_at = Column(DateTime, default=datetime.now, comment="生成时间")
+
+    __table_args__ = (
+        Index("idx_snapshot_user_plan", user_id, plan_id, version),
+    )

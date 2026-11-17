@@ -214,3 +214,9 @@ backend/app/static/shop/
 
 # 本地改前备份（AI 改动前自动生成，不入库）
 *.bak-*
+
+# 提交信息临时文件（AI 会话生成，勿入库）
+.git-msg*.txt
+
+# 抽取试运行产物（供写库前核对，勿入库）
+backend/data/tmp/
