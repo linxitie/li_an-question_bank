@@ -2980,6 +2980,18 @@ async def confirm_batch_import(
         except Exception as e:
             logger.warning(f"[import] 广播导入完成事件失败(非阻断): {e}")
 
+        # v9 M7：导入完成即做内容缺口体检，把六类缺口随响应返回。
+        # 放在返回前而不是入库循环里：体检要读磁盘图片、要 join 题组材料，
+        # 放在循环里会把一次导入拖慢数倍，且失败会影响入库结果。
+        try:
+            from ....services import content_gaps as _content_gaps
+            _gap_ids = [getattr(q, 'question_id', None) for q in new_questions]
+            _gap_ids = [int(i) for i in _gap_ids if i]
+            gaps = _content_gaps.scan_ids(db, _gap_ids)
+        except Exception as _e:
+            logger.warning(f"[import] 内容缺口体检失败(非阻断): {_e}")
+            gaps = None
+
         message = f'导入完成：成功 {imported}，失败 {failed}，跳过 {skipped}'
         if group_stats['groups'] or group_stats['materials']:
             message += (f'；题组 {group_stats["groups"]}（成员 {group_stats["members"]}），'
@@ -2995,6 +3007,7 @@ async def confirm_batch_import(
             'paper_id': record.paper_id,
             'match_rate': preview_data.get('match_rate', 0),
             'group_stats': group_stats,
+            'gaps': gaps,
             'message': message,
         }
     except Exception as e:

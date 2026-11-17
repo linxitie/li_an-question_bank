@@ -106,6 +106,20 @@ const routes: RouteRecordRaw[] = [
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
+    // 练习中心（手写页）：统一「快速练习 / 自定义刷题」的考点选择与练习蓝图
+    path: '/practice-center',
+    name: 'PracticeCenter',
+    component: () => import('@/views/student/shared/practice_center.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    // 收件箱（手写页，v9 M4）：复习提醒/任务/系统通知统一归档，与右下角铃铛共享 /api/notifications
+    path: '/inbox',
+    name: 'Inbox',
+    component: () => import('@/views/student/shared/Inbox.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
     path: '/solution',
     name: 'Solution',
     component: () => import('@/views/student/shared/solution.vue'),
@@ -250,6 +264,21 @@ const routes: RouteRecordRaw[] = [
     path: '/teacher/questions',
     name: 'TeacherQuestions',
     component: () => import('$vtj/vue/teacher_questions.vue'),
+    meta: { roles: ['teacher', 'admin'] }
+  },
+  {
+    // 考点复核（手写页）：低置信考点分配的人工确认/驳回，写回 point_assign_audit
+    path: '/teacher/point-review',
+    name: 'TeacherPointReview',
+    component: () => import('@/views/teacher/pc/PointReview.vue'),
+    meta: { roles: ['teacher', 'admin'] }
+  },
+  {
+    // 内容修复中心（手写页，v9 M7）：导入后自动体检出的缺口（缺图/缺横线/缺选项/缺答案/缺解析/缺材料），
+    // 按类分组、逐题定位，点「定位题目补录」跳到题目管理并用 ?question_id= 深链打开待修字段。
+    path: '/teacher/content-repair',
+    name: 'TeacherContentRepair',
+    component: () => import('@/views/teacher/pc/ContentRepair.vue'),
     meta: { roles: ['teacher', 'admin'] }
   },
   {

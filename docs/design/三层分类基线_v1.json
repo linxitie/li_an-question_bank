@@ -1,0 +1,876 @@
+[
+  {
+    "subject_id": 1,
+    "name": "行测",
+    "sub_categories": [
+      {
+        "sub_category_id": 1,
+        "name": "政治理论",
+        "exam_points": [
+          {
+            "point_id": 1,
+            "name": "习近平新时代中国特色社会主义思想",
+            "raw_name": "习近平新时代中国特色社会主义思想",
+            "direct_questions": 0,
+            "child_questions": 31
+          },
+          {
+            "point_id": 2,
+            "name": "党的二十大精神",
+            "raw_name": "党的二十大精神",
+            "direct_questions": 0,
+            "child_questions": 4
+          },
+          {
+            "point_id": 3,
+            "name": "马克思主义基本原理",
+            "raw_name": "马克思主义基本原理",
+            "direct_questions": 0,
+            "child_questions": 2
+          },
+          {
+            "point_id": 4,
+            "name": "党和国家方针政策",
+            "raw_name": "党和国家方针政策",
+            "direct_questions": 0,
+            "child_questions": 1
+          },
+          {
+            "point_id": 5,
+            "name": "政治立场与政治敏锐性",
+            "raw_name": "政治立场与政治敏锐性",
+            "direct_questions": 0,
+            "child_questions": 0
+          }
+        ],
+        "fallback_point_ids": [
+          635,
+          639,
+          644,
+          648,
+          652
+        ]
+      },
+      {
+        "sub_category_id": 2,
+        "name": "常识判断",
+        "exam_points": [
+          {
+            "point_id": 6,
+            "name": "经济常识",
+            "raw_name": "经济常识",
+            "direct_questions": 0,
+            "child_questions": 33
+          },
+          {
+            "point_id": 7,
+            "name": "文化常识",
+            "raw_name": "文化常识",
+            "direct_questions": 0,
+            "child_questions": 3
+          },
+          {
+            "point_id": 8,
+            "name": "社会常识",
+            "raw_name": "社会常识",
+            "direct_questions": 0,
+            "child_questions": 2
+          },
+          {
+            "point_id": 9,
+            "name": "生态常识",
+            "raw_name": "生态常识",
+            "direct_questions": 0,
+            "child_questions": 2
+          },
+          {
+            "point_id": 10,
+            "name": "法律常识",
+            "raw_name": "法律常识",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 11,
+            "name": "科技常识",
+            "raw_name": "科技常识",
+            "direct_questions": 0,
+            "child_questions": 4
+          },
+          {
+            "point_id": 12,
+            "name": "时政热点",
+            "raw_name": "时政热点",
+            "direct_questions": 0,
+            "child_questions": 1
+          }
+        ],
+        "fallback_point_ids": [
+          656,
+          660,
+          664,
+          668,
+          673,
+          678,
+          682
+        ]
+      },
+      {
+        "sub_category_id": 3,
+        "name": "言语理解与表达",
+        "exam_points": [
+          {
+            "point_id": 13,
+            "name": "逻辑填空",
+            "raw_name": "逻辑填空",
+            "direct_questions": 0,
+            "child_questions": 72
+          },
+          {
+            "point_id": 14,
+            "name": "片段阅读",
+            "raw_name": "片段阅读",
+            "direct_questions": 0,
+            "child_questions": 20
+          },
+          {
+            "point_id": 15,
+            "name": "语句表达",
+            "raw_name": "语句表达",
+            "direct_questions": 0,
+            "child_questions": 0
+          }
+        ],
+        "fallback_point_ids": [
+          687,
+          694,
+          699
+        ]
+      },
+      {
+        "sub_category_id": 4,
+        "name": "数量关系",
+        "exam_points": [
+          {
+            "point_id": 19,
+            "name": "数字推理",
+            "raw_name": "数字推理",
+            "direct_questions": 0,
+            "child_questions": 13
+          },
+          {
+            "point_id": 20,
+            "name": "数学运算",
+            "raw_name": "数学运算",
+            "direct_questions": 0,
+            "child_questions": 4
+          }
+        ],
+        "fallback_point_ids": [
+          706,
+          714
+        ]
+      },
+      {
+        "sub_category_id": 5,
+        "name": "判断推理",
+        "exam_points": [
+          {
+            "point_id": 21,
+            "name": "图形推理",
+            "raw_name": "图形推理",
+            "direct_questions": 0,
+            "child_questions": 93
+          },
+          {
+            "point_id": 22,
+            "name": "逻辑判断",
+            "raw_name": "逻辑判断",
+            "direct_questions": 0,
+            "child_questions": 17
+          },
+          {
+            "point_id": 23,
+            "name": "类比推理",
+            "raw_name": "类比推理",
+            "direct_questions": 0,
+            "child_questions": 5
+          },
+          {
+            "point_id": 24,
+            "name": "定义判断",
+            "raw_name": "定义判断",
+            "direct_questions": 0,
+            "child_questions": 19
+          }
+        ],
+        "fallback_point_ids": [
+          720,
+          726,
+          730,
+          734
+        ]
+      },
+      {
+        "sub_category_id": 6,
+        "name": "资料分析",
+        "exam_points": [
+          {
+            "point_id": 735,
+            "name": "资料类型",
+            "raw_name": "资料类型",
+            "direct_questions": 0,
+            "child_questions": 34
+          },
+          {
+            "point_id": 29,
+            "name": "统计术语",
+            "raw_name": "统计术语",
+            "direct_questions": 0,
+            "child_questions": 10
+          },
+          {
+            "point_id": 30,
+            "name": "速算技巧",
+            "raw_name": "速算技巧",
+            "direct_questions": 0,
+            "child_questions": 0
+          }
+        ],
+        "fallback_point_ids": [
+          745,
+          749,
+          740
+        ]
+      },
+      {
+        "sub_category_id": 7,
+        "name": "知觉速度与准确性",
+        "exam_points": [
+          {
+            "point_id": 31,
+            "name": "同符查找",
+            "raw_name": "同符查找",
+            "direct_questions": 0,
+            "child_questions": 4
+          },
+          {
+            "point_id": 32,
+            "name": "数字区间定位",
+            "raw_name": "数字区间定位",
+            "direct_questions": 0,
+            "child_questions": 2
+          },
+          {
+            "point_id": 33,
+            "name": "字符替换",
+            "raw_name": "字符替换",
+            "direct_questions": 0,
+            "child_questions": 0
+          }
+        ],
+        "fallback_point_ids": [
+          753,
+          757,
+          761
+        ]
+      },
+      {
+        "sub_category_id": 16,
+        "name": "科学推理",
+        "exam_points": [
+          {
+            "point_id": 762,
+            "name": "物理",
+            "raw_name": "物理",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 768,
+            "name": "化学",
+            "raw_name": "化学",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 773,
+            "name": "生物",
+            "raw_name": "生物",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 778,
+            "name": "地理",
+            "raw_name": "地理",
+            "direct_questions": 0,
+            "child_questions": 0
+          }
+        ],
+        "fallback_point_ids": [
+          767,
+          772,
+          777,
+          782
+        ]
+      }
+    ]
+  },
+  {
+    "subject_id": 2,
+    "name": "申论",
+    "sub_categories": [
+      {
+        "sub_category_id": 8,
+        "name": "归纳概括",
+        "exam_points": [
+          {
+            "point_id": 35,
+            "name": "问题概括",
+            "raw_name": "问题概括",
+            "direct_questions": 0,
+            "child_questions": 2
+          },
+          {
+            "point_id": 36,
+            "name": "原因概括",
+            "raw_name": "原因概括",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 37,
+            "name": "影响概括",
+            "raw_name": "影响概括",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 38,
+            "name": "对策概括",
+            "raw_name": "对策概括",
+            "direct_questions": 0,
+            "child_questions": 8
+          },
+          {
+            "point_id": 39,
+            "name": "特点概括",
+            "raw_name": "特点概括",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 40,
+            "name": "过程概括",
+            "raw_name": "过程概括",
+            "direct_questions": 0,
+            "child_questions": 1
+          }
+        ],
+        "fallback_point_ids": [
+          786,
+          790,
+          794,
+          798,
+          802,
+          806
+        ]
+      },
+      {
+        "sub_category_id": 9,
+        "name": "综合分析",
+        "exam_points": [
+          {
+            "point_id": 41,
+            "name": "观点分析",
+            "raw_name": "观点分析",
+            "direct_questions": 0,
+            "child_questions": 5
+          },
+          {
+            "point_id": 42,
+            "name": "现象分析",
+            "raw_name": "现象分析",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 43,
+            "name": "词句理解",
+            "raw_name": "词句理解",
+            "direct_questions": 0,
+            "child_questions": 6
+          },
+          {
+            "point_id": 44,
+            "name": "评析辨析",
+            "raw_name": "评析辨析",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 45,
+            "name": "比较分析",
+            "raw_name": "比较分析",
+            "direct_questions": 0,
+            "child_questions": 0
+          }
+        ],
+        "fallback_point_ids": [
+          810,
+          815,
+          819,
+          823,
+          827
+        ]
+      },
+      {
+        "sub_category_id": 10,
+        "name": "提出对策",
+        "exam_points": [
+          {
+            "point_id": 46,
+            "name": "问题识别",
+            "raw_name": "问题识别",
+            "direct_questions": 0,
+            "child_questions": 4
+          },
+          {
+            "point_id": 47,
+            "name": "对策建议",
+            "raw_name": "对策建议",
+            "direct_questions": 0,
+            "child_questions": 2
+          },
+          {
+            "point_id": 48,
+            "name": "方案设计",
+            "raw_name": "方案设计",
+            "direct_questions": 0,
+            "child_questions": 1
+          },
+          {
+            "point_id": 49,
+            "name": "应急处理",
+            "raw_name": "应急处理",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 50,
+            "name": "长效机制",
+            "raw_name": "长效机制",
+            "direct_questions": 0,
+            "child_questions": 0
+          }
+        ],
+        "fallback_point_ids": [
+          831,
+          835,
+          840,
+          844,
+          848
+        ]
+      },
+      {
+        "sub_category_id": 11,
+        "name": "应用文写作",
+        "exam_points": [
+          {
+            "point_id": 51,
+            "name": "公文写作",
+            "raw_name": "公文写作",
+            "direct_questions": 0,
+            "child_questions": 1
+          },
+          {
+            "point_id": 52,
+            "name": "事务文书",
+            "raw_name": "事务文书",
+            "direct_questions": 0,
+            "child_questions": 2
+          },
+          {
+            "point_id": 53,
+            "name": "案例分析",
+            "raw_name": "案例分析",
+            "direct_questions": 0,
+            "child_questions": 1
+          },
+          {
+            "point_id": 54,
+            "name": "宣传文稿",
+            "raw_name": "宣传文稿",
+            "direct_questions": 0,
+            "child_questions": 1
+          }
+        ],
+        "fallback_point_ids": [
+          855,
+          862,
+          866,
+          871
+        ]
+      },
+      {
+        "sub_category_id": 12,
+        "name": "议论文写作",
+        "exam_points": [
+          {
+            "point_id": 55,
+            "name": "命题作文",
+            "raw_name": "命题作文",
+            "direct_questions": 0,
+            "child_questions": 5
+          },
+          {
+            "point_id": 56,
+            "name": "话题作文",
+            "raw_name": "话题作文",
+            "direct_questions": 0,
+            "child_questions": 5
+          },
+          {
+            "point_id": 57,
+            "name": "材料作文",
+            "raw_name": "材料作文",
+            "direct_questions": 0,
+            "child_questions": 2
+          },
+          {
+            "point_id": 58,
+            "name": "政论文",
+            "raw_name": "政论文",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 59,
+            "name": "策论文",
+            "raw_name": "策论文",
+            "direct_questions": 0,
+            "child_questions": 0
+          }
+        ],
+        "fallback_point_ids": [
+          875,
+          879,
+          883,
+          887,
+          891
+        ]
+      }
+    ]
+  },
+  {
+    "subject_id": 3,
+    "name": "公专",
+    "sub_categories": [
+      {
+        "sub_category_id": 13,
+        "name": "职业素养",
+        "exam_points": [
+          {
+            "point_id": 60,
+            "name": "政治立场与忠诚度",
+            "raw_name": "政治立场与忠诚度",
+            "direct_questions": 0,
+            "child_questions": 46
+          },
+          {
+            "point_id": 61,
+            "name": "政治敏锐性与鉴别力",
+            "raw_name": "政治敏锐性与鉴别力",
+            "direct_questions": 0,
+            "child_questions": 0
+          },
+          {
+            "point_id": 62,
+            "name": "人民警察核心价值观",
+            "raw_name": "人民警察核心价值观",
+            "direct_questions": 0,
+            "child_questions": 15
+          },
+          {
+            "point_id": 63,
+            "name": "人民警察职业道德",
+            "raw_name": "人民警察职业道德",
+            "direct_questions": 0,
+            "child_questions": 22
+          },
+          {
+            "point_id": 64,
+            "name": "人民警察职业纪律",
+            "raw_name": "人民警察职业纪律",
+            "direct_questions": 0,
+            "child_questions": 44
+          }
+        ],
+        "fallback_point_ids": [
+          895,
+          899,
+          904,
+          909,
+          914
+        ]
+      },
+      {
+        "sub_category_id": 14,
+        "name": "基础知识",
+        "exam_points": [
+          {
+            "point_id": 65,
+            "name": "中国特色社会主义法治理论",
+            "raw_name": "中国特色社会主义法治理论",
+            "direct_questions": 0,
+            "child_questions": 706
+          },
+          {
+            "point_id": 66,
+            "name": "法学基础理论",
+            "raw_name": "法学基础理论",
+            "direct_questions": 0,
+            "child_questions": 27
+          },
+          {
+            "point_id": 67,
+            "name": "宪法基础知识",
+            "raw_name": "宪法基础知识",
+            "direct_questions": 0,
+            "child_questions": 77
+          },
+          {
+            "point_id": 68,
+            "name": "民法基础知识",
+            "raw_name": "民法基础知识",
+            "direct_questions": 0,
+            "child_questions": 91
+          },
+          {
+            "point_id": 69,
+            "name": "人民警察法基础知识",
+            "raw_name": "人民警察法基础知识",
+            "direct_questions": 0,
+            "child_questions": 55
+          },
+          {
+            "point_id": 70,
+            "name": "行政执法基础知识",
+            "raw_name": "行政执法基础知识",
+            "direct_questions": 0,
+            "child_questions": 94
+          },
+          {
+            "point_id": 71,
+            "name": "刑事执法基础知识",
+            "raw_name": "刑事执法基础知识",
+            "direct_questions": 0,
+            "child_questions": 175
+          },
+          {
+            "point_id": 72,
+            "name": "公安机关性质与职能",
+            "raw_name": "公安机关性质与职能",
+            "direct_questions": 0,
+            "child_questions": 529
+          },
+          {
+            "point_id": 73,
+            "name": "公安工作根本原则",
+            "raw_name": "公安工作根本原则",
+            "direct_questions": 0,
+            "child_questions": 16
+          },
+          {
+            "point_id": 74,
+            "name": "公安队伍建设",
+            "raw_name": "公安队伍建设",
+            "direct_questions": 0,
+            "child_questions": 31
+          },
+          {
+            "point_id": 75,
+            "name": "公安执法监督",
+            "raw_name": "公安执法监督",
+            "direct_questions": 0,
+            "child_questions": 21
+          }
+        ],
+        "fallback_point_ids": [
+          920,
+          925,
+          930,
+          935,
+          942,
+          946,
+          948,
+          955,
+          960,
+          967,
+          973
+        ]
+      },
+      {
+        "sub_category_id": 15,
+        "name": "基本警务能力",
+        "exam_points": [
+          {
+            "point_id": 76,
+            "name": "宣传教育",
+            "raw_name": "宣传教育",
+            "direct_questions": 0,
+            "child_questions": 55
+          },
+          {
+            "point_id": 77,
+            "name": "沟通协调",
+            "raw_name": "沟通协调",
+            "direct_questions": 0,
+            "child_questions": 19
+          },
+          {
+            "point_id": 78,
+            "name": "组织动员",
+            "raw_name": "组织动员",
+            "direct_questions": 0,
+            "child_questions": 37
+          },
+          {
+            "point_id": 79,
+            "name": "服务群众",
+            "raw_name": "服务群众",
+            "direct_questions": 0,
+            "child_questions": 26
+          },
+          {
+            "point_id": 80,
+            "name": "调查研究",
+            "raw_name": "调查研究",
+            "direct_questions": 0,
+            "child_questions": 35
+          },
+          {
+            "point_id": 81,
+            "name": "纠纷化解",
+            "raw_name": "纠纷化解",
+            "direct_questions": 0,
+            "child_questions": 42
+          },
+          {
+            "point_id": 82,
+            "name": "风险识别",
+            "raw_name": "风险识别",
+            "direct_questions": 0,
+            "child_questions": 31
+          },
+          {
+            "point_id": 83,
+            "name": "风险防范",
+            "raw_name": "风险防范",
+            "direct_questions": 0,
+            "child_questions": 35
+          },
+          {
+            "point_id": 84,
+            "name": "信息收集",
+            "raw_name": "信息收集",
+            "direct_questions": 0,
+            "child_questions": 62
+          },
+          {
+            "point_id": 85,
+            "name": "信息分析",
+            "raw_name": "信息分析",
+            "direct_questions": 0,
+            "child_questions": 40
+          },
+          {
+            "point_id": 86,
+            "name": "信息应用",
+            "raw_name": "信息应用",
+            "direct_questions": 0,
+            "child_questions": 7
+          },
+          {
+            "point_id": 87,
+            "name": "巡逻",
+            "raw_name": "巡逻",
+            "direct_questions": 0,
+            "child_questions": 76
+          },
+          {
+            "point_id": 88,
+            "name": "接警与处警",
+            "raw_name": "接警与处警",
+            "direct_questions": 0,
+            "child_questions": 157
+          },
+          {
+            "point_id": 89,
+            "name": "安全检查",
+            "raw_name": "安全检查",
+            "direct_questions": 0,
+            "child_questions": 9
+          },
+          {
+            "point_id": 90,
+            "name": "安全保护",
+            "raw_name": "安全保护",
+            "direct_questions": 0,
+            "child_questions": 10
+          },
+          {
+            "point_id": 91,
+            "name": "事态研判",
+            "raw_name": "事态研判",
+            "direct_questions": 0,
+            "child_questions": 11
+          },
+          {
+            "point_id": 92,
+            "name": "信息上报",
+            "raw_name": "信息上报",
+            "direct_questions": 0,
+            "child_questions": 14
+          },
+          {
+            "point_id": 93,
+            "name": "合理处置",
+            "raw_name": "合理处置",
+            "direct_questions": 0,
+            "child_questions": 77
+          },
+          {
+            "point_id": 94,
+            "name": "善后恢复",
+            "raw_name": "善后恢复",
+            "direct_questions": 0,
+            "child_questions": 6
+          }
+        ],
+        "fallback_point_ids": [
+          977,
+          981,
+          985,
+          989,
+          993,
+          997,
+          1001,
+          1005,
+          1009,
+          1013,
+          1017,
+          1021,
+          1024,
+          1029,
+          1033,
+          1037,
+          1041,
+          1045,
+          1049
+        ]
+      }
+    ]
+  }
+]

@@ -210,6 +210,149 @@ async def get_weekly_stats(
         "dailyTrend": daily_trend,
     }
 
+@router.get("/learning-report", response_model=Dict[str, Any], summary="学习报告（周/月真实聚合）")
+async def get_learning_report(
+        period: str = Query("week", pattern="^(day|week|month)$",
+                            description="day=昨天一整天；week=最近 7 天；month=最近 30 天"),
+        current_user: SysUser = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """学习报告：时长/题量/正确率/趋势/短板，全部来自 practice_record 真实聚合。
+
+    为什么要新增这个接口：study_plan.vue 的「学习报告」原先写死 326 分钟 / 148 题 /
+    78% 等前端模拟数，用户看到的是假数据。这里用三条聚合 SQL 出真值，
+    不再逐个日期循环查询（旧 /weekly 是 7 天 × 3 次查询，月报会放大到 90 次）。
+    """
+    days = 1 if period == "day" else (7 if period == "week" else 30)
+    now = datetime.now()
+    # day 的语义是「昨天一整天」而不是「最近 24 小时」：AI 教练日报的四个数字
+    # （昨日学习/正确率/完成题目/连续打卡）必须能和日历对得上，故用自然日窗口。
+    if period == "day":
+        window_end = datetime(now.year, now.month, now.day)
+        window_start = window_end - timedelta(days=1)
+    else:
+        window_end = now
+        window_start = now - timedelta(days=days)
+
+    totals = db.query(
+        func.count(PracticeRecord.record_id),
+        func.coalesce(func.sum(PracticeRecord.time_spent), 0),
+        func.coalesce(func.sum(func.coalesce(PracticeRecord.is_correct, 0)), 0),
+        func.count(PracticeRecord.is_correct)
+    ).filter(
+        PracticeRecord.user_id == current_user.user_id,
+        PracticeRecord.practice_time >= window_start,
+        PracticeRecord.practice_time < window_end
+    ).one()
+    questions_done = int(totals[0] or 0)
+    study_minutes = int(totals[1] or 0)
+    correct_count = int(totals[2] or 0)
+    graded_count = int(totals[3] or 0)
+    accuracy = round(correct_count / graded_count * 100, 1) if graded_count else 0.0
+
+    # 按日聚合一次，趋势与标签都在内存里切，避免逐日查库
+    day_rows = db.query(
+        func.date(PracticeRecord.practice_time).label("d"),
+        func.count(PracticeRecord.record_id),
+        func.coalesce(func.sum(func.coalesce(PracticeRecord.is_correct, 0)), 0),
+        func.count(PracticeRecord.is_correct)
+    ).filter(
+        PracticeRecord.user_id == current_user.user_id,
+        PracticeRecord.practice_time >= (now - timedelta(days=7) if period == "day" else window_start)
+    ).group_by("d").all()
+    day_map = {str(r[0]): (int(r[1] or 0), int(r[2] or 0), int(r[3] or 0)) for r in day_rows}
+
+    def _acc(q: int, c: int, graded: int) -> float:
+        return round(c / graded * 100, 1) if graded else 0.0
+
+    trend: List[float] = []
+    labels: List[str] = []
+    if period in ("week", "day"):
+        for i in range(7):
+            date = (now - timedelta(days=6 - i)).date()
+            q, c, g = day_map.get(str(date), (0, 0, 0))
+            trend.append(_acc(q, c, g))
+            labels.append(["一", "二", "三", "四", "五", "六", "日"][date.weekday()])
+    else:
+        # 30 天切成 4 个 7 天桶（最后一桶含今天及其前 8 天），判断的是"最近四周走势"
+        for bucket in range(4):
+            end = now - timedelta(days=7 * (3 - bucket))
+            start = end - timedelta(days=7)
+            q = c = g = 0
+            for offset in range(7):
+                date = (start + timedelta(days=offset + 1)).date()
+                dq, dc, dg = day_map.get(str(date), (0, 0, 0))
+                q += dq
+                c += dc
+                g += dg
+            trend.append(_acc(q, c, g))
+            labels.append(f"第{bucket + 1}周")
+
+    # 短板：按子科目聚合，样本 >=3 题且正确率最低的 3 个（无子科目的记录不计）
+    # 短板用「至少 30 天」的窗口：day 视图只有 1 天样本时几乎必然为空，
+    # 而用户要的是「我现在该补什么」，用 30 天更稳定（week/month 不变）。
+    weak_window_start = min(window_start, now - timedelta(days=30))
+    weak_rows = db.query(
+        PracticeRecord.sub_category_id,
+        func.count(PracticeRecord.record_id),
+        func.coalesce(func.sum(func.coalesce(PracticeRecord.is_correct, 0)), 0),
+        func.count(PracticeRecord.is_correct)
+    ).filter(
+        PracticeRecord.user_id == current_user.user_id,
+        PracticeRecord.practice_time >= weak_window_start,
+        PracticeRecord.practice_time < now,
+        PracticeRecord.sub_category_id.isnot(None)
+    ).group_by(PracticeRecord.sub_category_id).all()
+
+    from ....models.models import SubCategory  # 局部导入：避免顶层 import 分组变化
+
+    subcat_names = {
+        row[0]: row[1]
+        for row in db.query(SubCategory.id, SubCategory.name).filter(
+            SubCategory.id.in_([r[0] for r in weak_rows] or [0])
+        ).all()
+    }
+    weak_pool = []
+    for sid, q, c, g in weak_rows:
+        if int(g or 0) < 3:
+            continue
+        weak_pool.append({
+            "name": subcat_names.get(sid) or f"子科目{sid}",
+            "rate": _acc(int(q or 0), int(c or 0), int(g or 0)),
+        })
+    weak_pool.sort(key=lambda item: item["rate"])
+    weak = weak_pool[:3]
+
+    checkin = db.query(DailyCheckin).filter(
+        DailyCheckin.user_id == current_user.user_id
+    ).order_by(DailyCheckin.checkin_date.desc()).first()
+    streak = checkin.continuous_days if checkin else 0
+
+    # 结论文案由数据决定，不编造：没数据时说没数据
+    scope_text = "昨天" if period == "day" else f"最近 {days} 天"
+    if questions_done == 0:
+        comment = f"{scope_text}还没有练习记录，先做 20 道题，报告就会有内容。"
+    else:
+        head = (f"{scope_text}做了 {questions_done} 题，正确率 {accuracy}%，"
+                f"累计 {study_minutes} 分钟")
+        if weak:
+            comment = head + "；短板：" + "、".join(f"{w['name']}({w['rate']}%)" for w in weak) + "，建议优先加练。"
+        else:
+            comment = head + "；样本还不够定位短板，继续积累到每科 3 题以上。"
+
+    return {
+        "period": period,
+        "days": days,
+        "minutes": study_minutes,
+        "questions": questions_done,
+        "accuracy": accuracy,
+        "streak": streak,
+        "trend": trend,
+        "labels": labels,
+        "weak": weak,
+        "comment": comment,
+    }
+
 
 @router.get("/all-time", response_model=Dict[str, Any], summary="全时段学习统计")
 async def get_all_time_stats(

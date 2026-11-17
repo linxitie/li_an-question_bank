@@ -49,7 +49,9 @@ def test_page_route_count():
     #            使远端为 133，叠加本线 /mobile/paper-result 1 条 = 134。
     #            注：`/admin/papers` 页面路由在本线已按「试卷收敛 P4=A」改为 redirect（无 component），
     #            远端仍是页面版，合并取本线 redirect，故不是 135。两处门禁已同步为 134。
-    assert len(_pages()) == 134
+    # 136 = 134 + 2：v9 新增 /teacher/content-repair（内容修复中心）与 /inbox（收件箱），
+    #            两条都是真实页面（手写 .vue，非 redirect），故页面路由数上调到 136，两处门禁同改。
+    assert len(_pages()) == 136
 
 
 def test_whitelist_has_no_roles():

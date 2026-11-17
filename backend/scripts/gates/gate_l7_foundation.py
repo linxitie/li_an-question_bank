@@ -1016,13 +1016,21 @@ def check_vector_store() -> None:
             if needle not in body:
                 missing.append(f'{rel_path} 缺少 {needle}')
 
-    backend = os.environ.get('VECTOR_BACKEND', 'off').strip().lower() or 'off'
-    enabled = os.environ.get('VECTOR_STORE_ENABLED', 'true').strip().lower() not in (
-        '0', 'false', 'no', 'off')
-    embedding_enabled = os.environ.get(
-        'EMBEDDING_ENABLED', 'false').strip().lower() not in (
-        '0', 'false', 'no', 'off')
-    embedding_provider = os.environ.get('EMBEDDING_PROVIDER', 'off').strip().lower()
+    # v6.0 M1：口径只认 app/foundation/config.py，避免门禁与运行期各有一套默认值
+    # （此前门禁写死 off，四库默认开启后仍判 disabled）。
+    try:
+        if str(BACKEND_ROOT) not in sys.path:
+            sys.path.insert(0, str(BACKEND_ROOT))
+        from app.foundation import config as fconf
+
+        backend = (fconf.VECTOR_BACKEND or 'off').strip().lower()
+        enabled = bool(fconf.VECTOR_STORE_ENABLED)
+        embedding_enabled = bool(fconf.EMBEDDING_ENABLED)
+        embedding_provider = (fconf.EMBEDDING_PROVIDER or 'off').strip().lower()
+    except Exception as exc:  # 配置导入失败要暴露，而不是静默按 off 放过
+        _add(21, '向量投影与 VectorStore', False,
+             f'读取 foundation 配置失败：{type(exc).__name__}: {exc}', 'FAIL')
+        return
     if not enabled or backend in ('off', ''):
         _add(21, '向量投影与 VectorStore', not missing,
              '；'.join(missing) if missing else
@@ -1117,6 +1125,75 @@ def check_vector_store() -> None:
          '；'.join(missing) if missing else detail, 'FAIL')
 
 
+def check_classification_invariants() -> None:
+    """L7-22：K1/K2/K3/K4 分类恒等式（v6.0 M1）。
+
+    为什么这条必须进 FAIL 级：用户投诉的「考点全叫其他 / 练习记录没有考点」
+    本质是题目挂不上考点。K1/K2/K4 不成立就说明数据层已经错，前端再怎么改
+    都只是把错误换个地方展示。K3/K5–K7 依赖图/文档/向量三类投影，只在
+    rebuild_foundation.py --verify 的报告里体现，这里读最新报告做提醒。
+    """
+    db = _db_path()
+    if not db.exists():
+        _add(22, 'K1–K7 分类恒等式', False, f'数据库不存在：{db}', 'FAIL')
+        return
+    visible = 'qb.status = 1 AND qb.audit_status = 1'
+    con = sqlite3.connect(f'file:{db.as_posix()}?mode=ro', uri=True)
+    try:
+        k1 = con.execute(
+            'SELECT COUNT(*) FROM question_bank qb WHERE ' + visible +
+            ' AND (qb.point_id IS NULL OR qb.point_id NOT IN'
+            ' (SELECT point_id FROM knowledge_point))'
+        ).fetchone()[0]
+        k2 = con.execute(
+            'SELECT COUNT(*) FROM question_bank qb JOIN knowledge_point kp'
+            ' ON kp.point_id = qb.point_id WHERE ' + visible + ' AND kp.status <> 1'
+        ).fetchone()[0]
+        k4 = con.execute(
+            'SELECT COUNT(*) FROM (SELECT question_id, knowledge_point_id,'
+            ' COUNT(*) AS n FROM question_knowledge GROUP BY question_id,'
+            ' knowledge_point_id HAVING n > 1)'
+        ).fetchone()[0]
+        k3_missing = con.execute(
+            'SELECT COUNT(*) FROM knowledge_point p WHERE p.level = 2 AND p.status = 1'
+            ' AND NOT EXISTS (SELECT 1 FROM knowledge_point c WHERE c.parent_id = p.point_id'
+            ' AND c.status = 1)'
+        ).fetchone()[0]
+    finally:
+        con.close()
+
+    blocking: list[str] = []
+    if k1:
+        blocking.append(f'K1 孤儿题 {k1}（应落「其他（未细分）」）')
+    if k2:
+        blocking.append(f'K2 脏引用 {k2}')
+    if k4:
+        blocking.append(f'K4 同题同考点重复 {k4}')
+
+    warnings: list[str] = []
+    if k3_missing:
+        warnings.append(f'K3 有 {k3_missing} 个二级考点没有子节点（应视为可直练叶子）')
+    reports = sorted((BACKEND_ROOT / 'data' / 'audit').glob('foundation_rebuild_*.json'))
+    if not reports:
+        warnings.append('未找到 foundation_rebuild_*.json，K5–K7 未校验')
+    else:
+        try:
+            latest = json.loads(reports[-1].read_text(encoding='utf-8'))
+            inv = latest.get('invariants') or {}
+            if not inv.get('ok', False):
+                warnings.append(f'最近一次四库校验失败：{inv.get("failed")}')
+            else:
+                warnings.append(f'K1–K7 最近校验通过（{reports[-1].name}）')
+        except (OSError, ValueError):
+            warnings.append('foundation_rebuild 报告无法解析')
+
+    detail = f'K1={k1} K2={k2} K3父节点缺子={k3_missing} K4={k4}'
+    if warnings:
+        detail += '；' + '；'.join(warnings)
+    _add(22, 'K1–K7 分类恒等式', not blocking,
+         '；'.join(blocking) if blocking else detail, 'FAIL')
+
+
 def _db_path() -> Path:
     raw = os.environ.get('SQLITE_PATH') or str(BACKEND_ROOT / 'data' / 'question_bank.db')
     p = Path(raw)
@@ -1129,7 +1206,7 @@ CHECKS = (
     check_table_suffix, check_db_inventory, check_capacity, check_preview_volume,
     check_ws_relay, check_data_changed_contract, check_content_integrity,
     check_media_store, check_f2b_events, check_sync_replay, check_document_store,
-    check_graph_store, check_vector_store,
+    check_graph_store, check_vector_store, check_classification_invariants,
 )
 
 

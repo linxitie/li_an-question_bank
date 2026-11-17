@@ -671,6 +671,19 @@
 
         return items.map(function(item) {
           var defKey = nameKeyMap[item.name] || item.name;
+          // 「其他（未细分）」收容箱：后端以 sub.fallback 单独下发，内联树没有专门的
+          // 渲染分支，这里并成一个不可再下钻的叶子节点，点击后落到练习中心的收容入口。
+          var kps = (item.knowledge_points || []).slice();
+          if (item.fallback && (item.fallback.total_questions || 0) > 0) {
+            kps.push({
+              point_id: (item.fallback.point_ids && item.fallback.point_ids[0]) || 0,
+              point_name: item.fallback.name || '其他（未细分）',
+              total_questions: item.fallback.total_questions || 0,
+              done_count: item.fallback.done_count || 0,
+              children: [],
+              is_fallback: true,
+            });
+          }
           return {
             key: defKey,
             name: item.name,
@@ -678,7 +691,7 @@
             total_questions: item.total_questions || 0,
             done_count: item.done_count || 0,
             count: item.total_questions || 0,
-            knowledge_points: item.knowledge_points || [],
+            knowledge_points: kps,
             emoji: (SUBCARD_STYLES[item.name] || {}).emoji || '📝',
             bg: (SUBCARD_STYLES[item.name] || {}).bg || '#f8f9fc',
           };
@@ -1072,6 +1085,12 @@
         // 与既有协议对齐：exercise 页期望 xc/sl/ga 键（种子数据的 subject_code 可能为 auto_*）
         var catIdMap = { 1: 'xc', 2: 'sl', 3: 'ga' };
         var cat = catIdMap[sub.subject_id] || sub.subject_code || '';
+        // 合并后的「未细分类」不指向单个考点（它汇总了该科目所有兜底节点），
+        // 点进去就按整科目练，避免只练到其中一个节点的题。
+        if (k.is_fallback) {
+          this.$router.push('/practice-center?subject=' + cat);
+          return;
+        }
         this.$router.push('/exercise?subject=' + cat
           + '&kpId=' + k.point_id
           + '&kpName=' + encodeURIComponent(k.point_name || ''));
@@ -1199,10 +1218,13 @@
         } else if (key === 'adminmaterials') {
           this.$router.push('/admin/materials');
         } else if (key === 'quick') {
-          // 快速练习：进入当前选中科目的综合练习（不限子科目，传空subcategory由后端返回该科目所有题目）
+          // 快速练习：统一进「练习中心」手写页。
+          // 旧实现在本页用手风琴展示 科目→L2→L3，L3 全是「其他（未细分）」，
+          // 用户看到的就是一屏"其他"；练习中心按 drillable 分支展示，
+          // 可下钻的才下钻，不能下钻的直接给"直接练习"入口。
           var catKey = this.state.activeCategory;
           if (catKey === 'custom') catKey = 'xc';
-          this.$router.push('/exercise?subject=' + catKey + '&subcategory=');
+          this.$router.push('/practice-center?subject=' + catKey);
         } else if (key === 'history') {
           this.$router.push('/student/papers');
         } else if (key === 'smart') {
@@ -1214,6 +1236,14 @@
         }
       },
       switchCategory(key) {
+        // 「自定义刷题」Tab 直接跳练习中心：刷题的筛选条件（范围/年份/题型/顺序/
+        // 题量/时长）与预览必须与后端蓝图口径联动，本页内嵌表单无法表达。
+        if (key === 'custom') {
+          var cur = this.state.activeCategory;
+          if (cur === 'custom' || cur === undefined) cur = 'xc';
+          this.$router.push('/practice-center?subject=' + cur + '&focus=blueprint');
+          return;
+        }
         this.state.activeCategory = key;
         this.state.expandedSubCategory = null;
         this.state.expandedL2 = {};
@@ -1277,13 +1307,36 @@
         }
       },
       toggleL2(subKey, l2Id) {
+        // 只有存在下级考点的 L2 才展开；L2 自己就是叶子（含「其他（未细分）」收容箱、
+        // 或全部子考点都无题）时直接进入练习，避免再点出一层空壳或又一屏「其他」。
+        var l2 = this.findL2Point(subKey, l2Id);
+        if (l2 && (!l2.children || !l2.children.length)) {
+          this.startKnowledgePractice(subKey, l2);
+          return;
+        }
         var key = subKey + ':' + l2Id;
         this.state.expandedL2 = Object.assign({}, this.state.expandedL2, { [key]: !this.state.expandedL2[key] });
       },
+      findL2Point(subKey, l2Id) {
+        var subs = this.currentSubCategories || [];
+        for (var i = 0; i < subs.length; i++) {
+          if (subs[i].key !== subKey) continue;
+          var kps = subs[i].knowledge_points || [];
+          for (var j = 0; j < kps.length; j++) {
+            if (String(kps[j].point_id) === String(l2Id)) return kps[j];
+          }
+        }
+        return null;
+      },
       isL2Expanded(subKey, l2Id) { return !!this.state.expandedL2[subKey + ':' + l2Id]; },
       startKnowledgePractice(subKey, kp) {
-        if (!kp || !kp.point_id) return;
+        if (!kp) return;
         var catKey = this.state.activeCategory;
+        // 收容箱没有单一考点：统一落到练习中心的「其他（未细分）」入口
+        if (kp.is_fallback || !kp.point_id) {
+          this.$router.push('/practice-center?subject=' + catKey);
+          return;
+        }
         this.$router.push('/exercise?subject=' + catKey + '&kpId=' + kp.point_id + '&kpName=' + encodeURIComponent(kp.point_name || ''));
       },
       startCustomPractice() {
@@ -1692,9 +1745,21 @@
   .subcard-wrapper { display: flex; flex-direction: column; }
   .count-badge { font-size: 12px; font-weight: 700; color: #1a2b5f; background: #f0f2f5; padding: 2px 8px; border-radius: 10px; }
   .kp-list { margin: -4px 8px 8px 8px; padding: 8px 0; background: #fafbfc; border-radius: 0 0 12px 12px; border: 1px solid #f0f2f5; border-top: none; }
-  .kp-empty { text-align: center; padding: 12px; font-size: 12px; color: #8a8faa; }
+  /* 空态与「直接练习」按钮改为纵向排列：窄屏下原 inline 布局会让按钮压住文案 */
+  .kp-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    text-align: center;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: #8a8faa;
+    line-height: 1.6;
+  }
   .kp-fallback-btn {
     display: inline-block;
+    max-width: 100%;
     margin-top: 8px;
     padding: 6px 14px;
     border: 1px solid #1a2b5f;
@@ -1704,8 +1769,14 @@
     font-size: 12px;
     cursor: pointer;
     transition: all 0.2s;
+    white-space: normal;
+    line-height: 1.4;
   }
   .kp-fallback-btn:hover { background: #24397a; }
+  .kp-fallback-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
   .kp-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; cursor: pointer; transition: all 0.2s; border-bottom: 1px solid #f0f2f5; }
   .kp-row:last-child { border-bottom: none; }
   .kp-row:hover { background: #f0f4ff; }
@@ -1779,9 +1850,75 @@
   .load-more-wrap { text-align: center; padding-top: 4px; }
   .load-more-btn { padding: 8px 22px; border: 1px solid #e8eaf0; border-radius: 10px; background: #ffffff; color: #5a6488; font-size: 13px; cursor: pointer; }
   .load-more-btn:hover { border-color: #1a2b5f; color: #1a2b5f; }
+  /* 平板（769–1100px）：右侧 300px 边栏会挤掉左侧分类网格，卡片文字被压成竖排。
+     该区间改为单列主体 + 三列分类卡，宽度足够一行放下分类名。 */
+  @media (min-width: 769px) and (max-width: 1100px) {
+    .qb-main {
+      padding: 20px 20px 32px;
+    }
+    .qb-body {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+    }
+    .subcategory-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .subcard-name {
+      font-size: 14px;
+      line-height: 1.35;
+    }
+  }
   @media (max-width: 768px) {
     .rp-mask { padding: 0; }
     .rp-dialog { width: 100%; height: 100%; max-height: none; border-radius: 0; }
     .kp-line-name { width: 96px; }
+
+    /* 手机窄屏修复（实测 390px）：
+       1) 子操作条不换行时，两个按钮被挤成 40px 宽 → 文字变竖排（"院校联考机考系统"竖着显示）；
+       2) 分类卡片三列时每列约 110px，卡片文字竖排且右侧被裁。 */
+    .qb-sub-actions {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .sub-btn {
+      padding: 8px 12px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .search-box {
+      order: 3;
+      flex: 1 1 100%;
+      width: auto;
+      margin-left: 0;
+    }
+    /* 三列/两列在 390px 下仍会竖排（每列可用宽度 ~132px）：
+       主体改为单列、卡片内部图标缩小，分类名一行放得下 */
+    .qb-body {
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    .subcategory-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .subcard {
+      padding: 12px 10px;
+      gap: 8px;
+    }
+    .subcard-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      font-size: 16px;
+    }
+    .subcard-name {
+      font-size: 13px;
+      line-height: 1.3;
+      margin-bottom: 2px;
+    }
+    .subcard-count {
+      font-size: 10px;
+    }
   }
 </style>

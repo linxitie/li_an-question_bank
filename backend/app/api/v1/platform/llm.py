@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,7 @@ from ....core.config import settings
 from ....core.database import get_db
 from ....core.security import get_current_user
 from ....models.models import ChatMessage, ChatSession, SysUser
-from ....services import llm_client
+from ....services import llm_client, offline_coach
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,11 @@ class ChatRequest(BaseModel):
 class CreateSessionRequest(BaseModel):
     title: Optional[str] = Field(None, max_length=100)
     scene: Scene = "qa"
+
+
+class OfflineAnswerRequest(BaseModel):
+    question_key: str = Field(default="", max_length=40, description="固定问题 key；为空则按 message 兜底")
+    message: str = Field(default="", max_length=MAX_MESSAGE_LEN, description="用户原问题（自由提问时用于回显）")
 
 
 # ==================== 工具函数 ====================
@@ -78,6 +84,29 @@ def _load_history(session_id: int, db: Session) -> List[Dict[str, str]]:
     return [{"role": r.role, "content": r.content} for r in rows]
 
 
+def _llm_configured() -> bool:
+    """密钥是否可用（与 llm_client._post 的判定保持一致）"""
+    key = (settings.LLM_API_KEY or "").strip()
+    return bool(key) and not key.startswith("<")
+
+
+def _llm_unavailable(err: llm_client.LLMClientError) -> JSONResponse:
+    """大模型不可用时的统一降级契约（方案 §7.2）
+
+    前端只认 `fallback: true` → 切「离线教练」模式；
+    不把上游原文塞进 detail（用户看"401"只会以为系统坏了）。
+    """
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": err.message,
+            "code": err.code,
+            "fallback": True,
+            "offline_questions": offline_coach.OFFLINE_QUESTIONS,
+        },
+    )
+
+
 # ==================== 路由 ====================
 
 
@@ -100,7 +129,7 @@ async def chat(
             )
         except llm_client.LLMClientError as e:
             logger.warning("一次性 AI 任务调用失败: %s", e.message)
-            raise HTTPException(status_code=503, detail=e.message)
+            return _llm_unavailable(e)
         return {
             "reply": reply,
             "session_id": None,
@@ -205,7 +234,7 @@ async def chat(
         if is_new_session:
             db.delete(session)
         db.commit()
-        raise HTTPException(status_code=503, detail=e.message)
+        return _llm_unavailable(e)
 
     # 5. 写 AI 回复
     ai_msg = ChatMessage(
@@ -358,3 +387,40 @@ async def assemble_context_api(
             for m in memories
         ],
     }
+
+
+# ==================== 离线教练（M6 降级态） ====================
+
+
+@router.get("/offline/status", summary="AI 服务状态与离线问题池")
+async def offline_status(current_user: SysUser = Depends(get_current_user)):
+    """前端进入页面先问一次：AI 可用就走正常对话，不可用直接切离线教练。
+
+    不试探性发一条真实消息去"测活"——那会消耗额度，也会在会话里留下脏消息。
+    """
+    return {
+        "llm_configured": _llm_configured(),
+        "model": settings.LLM_MODEL,
+        "questions": offline_coach.OFFLINE_QUESTIONS,
+    }
+
+
+@router.post("/offline/answer", summary="离线教练作答（本地数据，不调用大模型）")
+async def offline_answer(
+    req: OfflineAnswerRequest,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    result = offline_coach.build_answer(
+        db,
+        current_user.user_id,
+        req.question_key,
+        req.message,
+    )
+    return {
+        "reply": result["reply"],
+        "mode": "offline",
+        "question_key": result["key"],
+        "data": result.get("data") or {},
+    }
+

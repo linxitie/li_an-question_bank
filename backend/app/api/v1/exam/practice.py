@@ -15,7 +15,7 @@ from sqlalchemy import func, desc, case, distinct, or_, cast, String
 from ....core.database import get_db, commit_with_retry
 from ....core.security import get_current_user
 from ....models.models import (
-    PracticeRecord, QuestionBank, QuestionSubject, QuestionType, SysUser,
+    PracticeRecord, QuestionBank, QuestionSubject, QuestionType, SysUser, SubCategory,
     SmartExamRecord, ExamRecord, ExamAnswerDetail,
     YearPaper, ExamPaper, KnowledgePoint, PracticeDraft
 )
@@ -156,11 +156,15 @@ async def batch_record_practice(
         "source": item.get('source') or '随机练习',
     } for item in records_data]
     source = payload.get('source') or '随机练习'
+    # 练习蓝图（考点/子科目）随交卷一起回传，用于「练习记录」按考点归类；
+    # 不传时由 practice_grading.resolve_practice_scope 按题目主考点兜底解析。
+    scope = payload.get('scope') if isinstance(payload.get('scope'), dict) else None
     try:
         result = await submit_answers(
             db, current_user.user_id, normalized,
             source_type=source,
             session_id=payload.get('session_id'),
+            scope=scope,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -220,9 +224,22 @@ async def get_practice_records(
     total = query.count()
     records = query.order_by(desc(PracticeRecord.practice_time)).offset(offset).limit(limit).all()
 
+    # 子科目名一次查完，避免逐条 N+1；用于把「其他（未细分）」补全成
+    # 「其他（未细分） · 基础知识」这种可读的范围描述（用户反馈练习记录只显示"其他"）。
+    subcat_names = {
+        int(sc_id): str(name)
+        for sc_id, name in db.query(SubCategory.id, SubCategory.name).all()
+        if sc_id is not None
+    }
+
     items = []
     for r in records:
         q = db.query(QuestionBank).filter(QuestionBank.question_id == r.question_id).first() if r.question_id else None
+        # 历史记录可能仍为空（回填脚本未跑的库），用题目主考点兜底，绝不再让前端显示空/其他
+        scope_name = r.scope_name
+        if not scope_name:
+            scope_name = getattr(getattr(q, "point", None), "point_name", None)
+        sub_category_id = r.sub_category_id or (q.sub_category_id if q else None)
         items.append({
             "record_id": r.record_id,
             "question_id": r.question_id,
@@ -236,6 +253,11 @@ async def get_practice_records(
             "practice_date": r.practice_date.isoformat() if r.practice_date else None,
             "practice_time": r.practice_time.isoformat() if r.practice_time else None,
             "source": r.source_type,
+            "scope_type": r.scope_type,
+            "scope_id": r.scope_id,
+            "scope_name": scope_name,
+            "sub_category_id": sub_category_id,
+            "sub_category_name": subcat_names.get(int(sub_category_id)) if sub_category_id else None,
         })
 
     # 每日统计
@@ -620,6 +642,41 @@ async def get_unified_practice_stats(
     }
 
 
+def _merge_fallback_rows(kps: list) -> list:
+    """把同一科目下所有兜底考点（「其他」）合并成一行汇总。
+
+    done 取各行 done 之和（题目互不重叠，兜底节点之间没有共享题），
+    accuracy 按 attempts 加权，避免小样本行把整块正确率带偏。
+    """
+    kept, fallbacks = [], []
+    for k in kps:
+        (fallbacks if k.get("is_fallback") else kept).append(k)
+    if len(fallbacks) <= 1:
+        if fallbacks:
+            fb = dict(fallbacks[0])
+            fb["point_name"] = "未细分类"
+            fb["is_fallback"] = True
+            kept.append(fb)
+        return kept
+
+    total = sum(int(k.get("total") or 0) for k in fallbacks)
+    done = sum(int(k.get("done") or 0) for k in fallbacks)
+    weighted = sum((k.get("accuracy") or 0) * (k.get("done") or 0) for k in fallbacks)
+    done = min(done, total) if total else done
+    kept.append({
+        "point_id": fallbacks[0].get("point_id"),
+        "point_name": "未细分类",
+        "is_fallback": True,
+        "sub_category_name": fallbacks[0].get("sub_category_name"),
+        "total": total,
+        "done": done,
+        "done_pct": round(done * 100 / total, 1) if total else 0,
+        "accuracy": round(weighted / done, 1) if done else 0,
+        "grouped_points": len(fallbacks),
+    })
+    return kept
+
+
 @router.get("/knowledge-progress", summary="知识点粒度练习进度")
 async def get_knowledge_progress(
     current_user: SysUser = Depends(get_current_user),
@@ -636,8 +693,11 @@ async def get_knowledge_progress(
         QuestionSubject.subject_id,
         QuestionSubject.subject_name,
         QuestionSubject.subject_code,
+        SubCategory.name,
     ).join(
         QuestionSubject, KnowledgePoint.subject_id == QuestionSubject.subject_id
+    ).outerjoin(
+        SubCategory, KnowledgePoint.sub_category_id == SubCategory.id
     ).filter(
         KnowledgePoint.status == 1,
         KnowledgePoint.level == 3,
@@ -673,7 +733,7 @@ async def get_knowledge_progress(
     stat_map = {r[0]: r for r in stat_rows}
 
     subjects, subject_order = {}, []
-    for pid, pname, sid, sname, scode in kp_rows:
+    for pid, pname, sid, sname, scode, scname in kp_rows:
         if sid not in subjects:
             subjects[sid] = {
                 "subject_id": sid,
@@ -692,14 +752,24 @@ async def get_knowledge_progress(
         subjects[sid]["kps"].append({
             "point_id": pid,
             "point_name": pname,
+            # 「其他（未细分）」是收容叶子：前端渲染成"未细分题库"，不做进一步下钻
+            "is_fallback": str(pname or "").strip() in ("其他（未细分）", "其他"),
+            "sub_category_name": scname,
             "total": total,
             "done": done,
             "done_pct": round(done * 100 / total, 1),
             "accuracy": round(corrects * 100 / attempts, 1) if attempts > 0 else 0,
         })
 
+    # 兜底考点（名为「其他」的 L3）在库里是分散的 31 个节点，逐行输出就是用户
+    # 截图里「其他 / 其他 / 其他…」的满屏噪声。这里按科目把兜底行合并成唯一一行
+    # 「未细分类」，只做汇总、不再下钻——这正是 m02318 第 2 条要求：
+    # 考点以下不得再用「其他」做分类，能下钻的只有真实考点。
     for sid in subject_order:
-        subjects[sid]["kps"].sort(key=lambda k: k["done_pct"])
+        merged = _merge_fallback_rows(subjects[sid]["kps"])
+        subjects[sid]["kps"] = merged
+        # 薄弱优先（完成率升序），但「未细分类」固定排最后，避免它霸占首位
+        subjects[sid]["kps"].sort(key=lambda k: (k["is_fallback"], k["done_pct"]))
 
     return {"subjects": [subjects[sid] for sid in subject_order]}
 

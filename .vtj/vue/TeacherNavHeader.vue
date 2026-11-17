@@ -179,6 +179,10 @@ export default defineComponent({
     const navTabs = [
       { key: 'dashboard', label: '工作台', path: '/teacher/dashboard' },
       { key: 'questions', label: '题目管理', path: '/teacher/questions' },
+      // v8 新增：低置信考点分配的人工复核入口（手写页 /teacher/point-review）
+      { key: 'review', label: '考点复核', path: '/teacher/point-review' },
+      // v9 新增：导入后内容缺口（缺图/横线/选项/答案/解析/材料）的集中修复入口
+      { key: 'content-repair', label: '内容修复', path: '/teacher/content-repair' },
       { key: 'papers', label: '试卷管理', path: '/teacher/papers' },
       { key: 'scores', label: '成绩管理', path: '/teacher/scores' },
       { key: 'classes', label: '班级管理', path: '/teacher/classes' },
@@ -462,4 +466,16 @@ export default defineComponent({
 .profile-modal-footer { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }
 .btn-secondary { padding: 10px 22px; background: #fff; color: #1A3C6D; border: 1px solid #1A3C6D; border-radius: 6px; cursor: pointer; font-size: 14px; }
 .btn-secondary:hover { background: #f0f5ff; }
+
+/* 教师端 8 个导航项在 390/834px 下会挤出容器、把「考点复核」裁掉。
+   窄屏改为横向滚动的单行导航，logo 让位，用户区不参与压缩。 */
+@media (max-width: 1024px) {
+  .nav-bar { padding: 0 12px; gap: 8px; }
+  .nav-logo { display: none; }
+  .nav-links { overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; -ms-overflow-style: none; }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-tab { flex-shrink: 0; }
+  .nav-user-area { flex-shrink: 0; }
+  .user-name, .role-tag { display: none; }
+}
 </style>

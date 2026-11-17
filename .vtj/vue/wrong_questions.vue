@@ -14,6 +14,16 @@
       <!-- 记忆强度曲线（4-2） -->
       <MemoryCurve />
       <div class="wq-filter-bar">
+        <div class="filter-group filter-group-search">
+          <label> 搜索</label>
+          <input
+            v-model="state.filter.keyword"
+            class="filter-input"
+            type="search"
+            placeholder="题干 / 材料 / 来源 模糊搜索"
+            aria-label="搜索错题（题干、材料、来源）"
+            @keyup.enter="applyFilter" />
+        </div>
         <div class="filter-group">
           <label> 收录时间</label>
           <select v-model="state.filter.time">
@@ -36,7 +46,25 @@
             <option value="综合分析">综合分析</option>
           </select>
         </div>
+        <div class="filter-group">
+          <label> 年份</label>
+          <select v-model="state.filter.year" aria-label="按题目年份筛选">
+            <option value="">全部年份</option>
+            <option v-for="y in yearOptions" :key="y" :value="String(y)">{{ y }}年</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label> 来源</label>
+          <input
+            v-model="state.filter.source"
+            class="filter-input filter-input-sm"
+            type="text"
+            placeholder="如 安徽 / 北京 / 联考"
+            aria-label="按题目来源筛选"
+            @keyup.enter="applyFilter" />
+        </div>
         <button class="filter-btn" @click="applyFilter">筛选</button>
+        <button class="filter-btn filter-btn-ghost" @click="goHeatmap">错题热力</button>
       </div>
       <div class="wq-body">
         <nav class="wq-nav">
@@ -315,6 +343,30 @@
             <button class="detail-close-btn" @click="closeQuestionDetail">关闭</button>
           </div>
           <div class="wq-detail-body">
+            <!-- 复合题材料：吸顶展示。滚动长题干与选项时材料始终可见，避免"题目完整性被破坏" -->
+            <section
+              v-if="state.detailQuestion.group && state.detailQuestion.group.content"
+              class="detail-material"
+            >
+              <header class="detail-material__head" @click="toggleMaterial">
+                <span class="detail-material__title">📄 本组材料</span>
+                <span v-if="state.detailQuestion.group.title" class="detail-material__sub">{{ state.detailQuestion.group.title }}</span>
+                <span class="detail-material__toggle">{{ state.materialOpen ? '收起' : '展开' }}</span>
+              </header>
+              <div
+                v-show="state.materialOpen"
+                class="detail-material__body"
+                v-html="renderImageMarkers(state.detailQuestion.group.content, state.detailQuestion.image_map)"
+              ></div>
+            </section>
+            <p v-else-if="state.detailQuestion.groupId" class="wq-gap-note">
+              ⚠️ 本题属于复合题，但题组材料缺失，当前只显示小题题干。
+            </p>
+
+            <div v-if="state.detailQuestion.gapTags && state.detailQuestion.gapTags.length" class="wq-gap-tags">
+              <span v-for="tag in state.detailQuestion.gapTags" :key="tag" class="wq-gap-tag">{{ tag }}</span>
+            </div>
+
             <div class="detail-question-content">
               <p class="detail-stem" v-html="renderImageMarkers(state.detailQuestion.content, state.detailQuestion.image_map)"></p>
             </div>
@@ -324,7 +376,8 @@
                 :key="idx"
                 :class="['detail-option', {
                   correct: isCorrectOption(opt.key, state.detailQuestion.correctAnswer),
-                  wrong: isWrongOption(opt.key, state.detailQuestion.userAnswer, state.detailQuestion.correctAnswer)
+                  wrong: isWrongOption(opt.key, state.detailQuestion.userAnswer, state.detailQuestion.correctAnswer),
+                  'is-placeholder': isPlaceholderOption(opt.value || opt.text)
                 }]">
                 <span class="option-letter">{{ opt.key || String.fromCharCode(65 + idx) }}.</span>
                 <span class="option-text" v-html="renderImageMarkers(opt.value || opt.text, state.detailQuestion.image_map)"></span>
@@ -334,7 +387,10 @@
               <strong>您的答案：</strong><span class="user-answer-text">{{ state.detailQuestion.userAnswer }}</span>
             </div>
             <div class="detail-analysis-section">
-              <h4>答案解析</h4>
+              <h4>
+                答案解析
+                <span v-if="state.detailQuestion.analysisSource === 'missing'" class="wq-gap-tag inline">无官方解析</span>
+              </h4>
               <p v-html="renderImageMarkers(state.detailQuestion.analysis, state.detailQuestion.image_map)"></p>
             </div>
           </div>
@@ -421,7 +477,7 @@
   import NavBar from './navbar.vue';
   import { useProvider } from '@vtj/renderer';
   import { ElMessage } from 'element-plus';
-import { renderQuestionContent } from '@/utils/questionRender';
+import { renderQuestionContent, renderQuestionSummary } from '@/utils/questionRender';
 import { useWrongbookStore } from '@/modules/wrongbook/store';
 import DueReviewCard from '@/components/review/DueReviewCard.vue';
 import MemoryCurve from '@/components/review/MemoryCurve.vue';
@@ -433,7 +489,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
       const provider = useProvider({ id: 'wrong_questions', version: '1785754600000' });
       const wrongbookStore = useWrongbookStore();
       const state = reactive({
-        filter: { time: 'all', knowledge: 'all' },
+        filter: { time: 'all', knowledge: 'all', keyword: '', year: '', source: '' },
         activeNav: 'xc',
         navNameMap: { xc: '行测', sl: '申论', ga: '公专' },
         zhantiList: [],
@@ -473,6 +529,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
         // 题目详情弹窗
         showQuestionDetail: false,
         detailQuestion: null,
+        materialOpen: true,
         // 批改结果页
         showReviewResult: false,
         reviewResult: null,
@@ -492,6 +549,16 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
       };
     },
     computed: {
+      // M5：年份选项取自当前数据集（只列出真实存在的年份，避免用户选到空结果）
+      yearOptions() {
+        var set = {};
+        (this.state.allQuestions || []).forEach(function(q) {
+          if (q.year) set[q.year] = true;
+        });
+        var list = Object.keys(set).map(Number).filter(function(y) { return !isNaN(y); });
+        list.sort(function(a, b) { return b - a; });
+        return list;
+      },
       navList() {
         return [
           { key: 'xc', name: '行测', icon: EditPen, badge: this.getSubjectBadgeCount('xc') },
@@ -525,6 +592,23 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
         // 知识点筛选
         if (this.state.filter.knowledge !== 'all') {
           list = list.filter((q) => q.tags.includes(this.state.filter.knowledge));
+        }
+
+        // M5：关键词 / 年份 / 来源（服务端已过滤一遍，这里是切 tab 时的本地兜底）
+        const kw = (this.state.filter.keyword || '').trim().toLowerCase();
+        if (kw) {
+          list = list.filter((q) => {
+            const hay = ((q.title || '') + ' ' + (q.source || '') + ' ' + (q.category || '')).toLowerCase();
+            return hay.indexOf(kw) >= 0;
+          });
+        }
+        if (this.state.filter.year) {
+          const y = Number(this.state.filter.year);
+          list = list.filter((q) => Number(q.year) === y);
+        }
+        const src = (this.state.filter.source || '').trim().toLowerCase();
+        if (src) {
+          list = list.filter((q) => String(q.source || '').toLowerCase().indexOf(src) >= 0);
         }
 
         return list;
@@ -585,7 +669,12 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
         var self = this;
         this.wrongbookStore.reset();
         this.ensureLogin().then(function() {
-          return self.wrongbookStore.load({ pageSize: 100 });
+          return self.wrongbookStore.load({
+            pageSize: 100,
+            keyword: self.state.filter.keyword,
+            year: self.state.filter.year ? Number(self.state.filter.year) : undefined,
+            source: self.state.filter.source
+          });
         }).then(function() {
           var items = self.wrongbookStore.items || [];
           if (items.length) {
@@ -603,7 +692,10 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
                 subject: subjectKey,
                 type: item.question_type_detail || '单选题',
                 date: item.add_time || '',
-                title: item.question_content || '',
+                // 列表标题一律走摘要渲染：原始题干里的 <img src="/static/..."> 曾被
+                // 直接插值成纯文本，用户看到的就是一整串图片路径（2026-11-14 截图）。
+                // renderQuestionSummary 把图片折成「[图片]」并剥掉全部标签。
+                title: renderQuestionSummary(item.question_content) || '',
                 tags: item.sub_category ? [item.sub_category] : [],
                 status: item.is_cut ? 'chopped' : (item.mastery_level === 'MASTERED' ? 'mastered' : 'needs-review'),
                 statusText: item.is_cut ? '已斩题' : (item.mastery_level === 'MASTERED' ? '已掌握' : '待复习'),
@@ -619,6 +711,8 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
                 masteryLevel: item.mastery_level === 'MASTERED' ? 100 : (item.mastery_level === 'PARTIAL' ? 50 : 0),
                 chopped: !!item.is_cut,
                 errorCount: item.error_count || 1,
+                year: item.year || null,
+                source: item.source || '',
                 category: item.subject_name || ''
               };
             });
@@ -687,8 +781,15 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
         } catch(e) { console.warn('删除笔记失败:', e); }
       },
       
+      goHeatmap() {
+        // D6：错题分布热力（考点/知识点）落在「知识图谱」页的第三种视图
+        this.$router.push('/student/knowledge/graph?view=heat');
+      },
       applyFilter() {
-        ElMessage.success('筛选条件已更新');
+        // M5：关键词/年份/来源必须回到服务端查（本地只加载了第一页 100 条）
+        this.loadData();
+        const kw = (this.state.filter.keyword || '').trim();
+        ElMessage.success(kw ? '已按「' + kw + '」搜索' : '筛选条件已更新');
       },
       
       // 设置复习模式
@@ -815,7 +916,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
           subject: subjectKey,
           type: unifiedType,
           date: item.add_time || '',
-          title: item.question_content || '',
+          title: renderQuestionSummary(item.question_content) || '',
           tags: item.subcategory ? [item.subcategory] : [],
           status: item.is_cut ? 'chopped' : 'needs-review',
           statusText: item.is_cut ? '已斩题' : '待复习',
@@ -1049,7 +1150,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
           return;
         }
         try {
-          ElMessage.info('加载题目详情...');
+          // 不再弹「加载题目详情...」：手机端它正好压在弹窗头部，且默认 3s 才消失
           const res = await window.__VTJ_AUTH__.apiFetch('/api/wrong-questions/' + q.wrong_id + '/detail', {
             headers: this.getJsonHeaders()
           });
@@ -1058,10 +1159,20 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
             return;
           }
           const data = await res.json();
+          const group = data.group || null;
+          const hasMaterial = !!(group && String(group.content || '').trim().length >= 10);
+          const gapTags = [];
+          if (data.group_id && !hasMaterial) gapTags.push('材料缺失');
+          // 「无官方解析」在答案解析标题旁已有内联标记，这里不再重复进标签行
+          if (!String(data.correct_answer || '').trim()) gapTags.push('正确答案缺失');
+          if ((data.options || []).some((o) => this.isPlaceholderOption(o.value || o.text))) gapTags.push('选项待补');
+          this.state.materialOpen = true;
           this.state.detailQuestion = {
             wrong_id: data.wrong_id,
             question_id: data.question_id,
-            content: data.content,
+            // 复合题的 detail.content 会把题组材料整段拼进正文；材料另由吸顶区展示，
+            // 这里只保留小题题干，否则材料会出现两遍。
+            content: hasMaterial && data.stem ? data.stem : data.content,
             options: data.options || [],
             correctAnswer: data.correct_answer || '',
             userAnswer: data.user_answer || '',
@@ -1070,7 +1181,11 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
             type: data.type || '单选题',
             globalAccuracy: data.global_accuracy || 0,
             is_cut: data.is_cut,
-            image_map: data.image_map || {}
+            image_map: data.image_map || {},
+            group: group,
+            groupId: data.group_id || 0,
+            analysisSource: data.analysis_source || 'official',
+            gapTags: gapTags
           };
           this.state.showQuestionDetail = true;
         } catch(e) {
@@ -1081,6 +1196,19 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
       closeQuestionDetail() {
         this.state.showQuestionDetail = false;
         this.state.detailQuestion = null;
+      },
+
+      toggleMaterial() {
+        this.state.materialOpen = !this.state.materialOpen;
+      },
+
+      /**
+       * 选项是否为原始缺失占位（题库里有「（待补充）」「图中的B选项」这类脏数据）。
+       * 命中时高亮提示，避免用户以为自己看到了完整选项。
+       */
+      isPlaceholderOption(text) {
+        const s = String(text || '');
+        return /^\s*[（(]?\s*(待补充|略|暂无)\s*[）)]?\s*$/.test(s) || /图中的\s*[A-D]\s*选项/.test(s);
       },
 
       // ========== 图片占位符替换 ==========
@@ -1095,12 +1223,16 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
       renderImageMarkers(html, imageMap) {
         if (!html) return '';
         var imgMap = imageMap || {};
-        var replaced = String(html).replace(/\[IMAGE:([a-fA-F0-9]+)_(\d+)\]/g, function(match, hash, seq) {
-          var key = hash + '_' + seq;
-          var src = imgMap[key];
+        // M5：真实标记是三段式 [IMAGE:{8位hash}_{题号}_{图序}]，此前只写了
+        // 两段式正则，三段标记匹配不上 → 裸文字 "[IMAGE:5d739001_79_0]" 直接显示在题目里。
+        // 磁盘命名恰好是 {hash}_{seq}_{idx}.png（平铺在 static/questions/ 下），
+        // 故命中映射优先、否则按三段拼真实路径，两段旧标记继续兼容。
+        var replaced = String(html).replace(/\[IMAGE:([a-fA-F0-9]+)_(\d+)(?:_(\d+))?\]/g, function(match, hash, seq, idx) {
+          var key = idx ? hash + '_' + seq + '_' + idx : hash + '_' + seq;
+          var src = imgMap[key] || imgMap[hash + '_' + seq];
           if (!src) {
-            // 无映射记录，尝试扁平路径格式
-            src = '/static/questions/' + hash + '_' + seq + '.png';
+            // 无映射记录：按磁盘真实命名拼路径（三段优先，缺 idx 时退回两段）
+            src = '/static/questions/' + key + '.png';
           }
           // 转义属性值，防止 image_map 中的数据破坏属性边界造成注入
           var safeSrc = String(src)
@@ -1110,9 +1242,11 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
             .replace(/>/g, '&gt;');
           // javascript: 等危险协议一律降级为占位图
           if (/^\s*javascript:/i.test(String(src))) safeSrc = '/static/images/placeholder.png';
-          return '<img src="' + safeSrc + '" onerror="this.onerror=null;this.src=\'/static/images/placeholder.png\';this.alt=\'图片加载失败\'" ' +
+          // 缺图兜底走全局重试：最终落到统一「配图缺失」占位图，不再出现碎图图标
+          return '<img src="' + safeSrc + '" class="q-img" loading="lazy" ' +
+                 'onerror="window.__retryImg ? window.__retryImg(this) : (this.onerror=null,this.src=\'/static/images/placeholder.png\')" ' +
                  'style="max-width:100%;height:auto;border:1px solid #e8eaf0;' +
-                 'border-radius:8px;margin:4px 0;" alt="题目图片" />';
+                 'border-radius:8px;margin:4px 0;" alt="题目配图" />';
         });
         // 交给单一真源：还原被转义的 <img>、归一化地址、白名单清洗并补 onerror。
         // 之前只调 sanitizeHtml，数据库里的 &lt;img ...&gt; 会原样显示成路径文本。
@@ -1584,7 +1718,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
               id: item.wrong_id,
               originalQuestionId: item.question_id,
               subject: item.subject_name || '',
-              title: item.question_content || '',
+              title: renderQuestionSummary(item.question_content) || '',
               createTime: createTime,
               daysLeft: daysLeft
             };
@@ -1666,13 +1800,30 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
     color: #5a6488;
     font-weight: 600;
   }
-  .filter-group select {
+  .filter-group select,
+  .filter-group .filter-input {
     padding: 6px 12px;
     border: 1px solid #e8eaf0;
     border-radius: 8px;
     font-size: 13px;
     color: #1a2b5f;
     outline: none;
+    background: #fff;
+  }
+  .filter-group .filter-input {
+    min-width: 220px;
+  }
+  .filter-group .filter-input-sm {
+    min-width: 130px;
+  }
+  .filter-group .filter-input:focus-visible,
+  .filter-group select:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+    border-color: #2563eb;
+  }
+  .filter-group-search {
+    flex: 1 1 260px;
   }
   .filter-btn {
     padding: 8px 20px;
@@ -1682,6 +1833,16 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
     border-radius: 10px;
     cursor: pointer;
     font-weight: 600;
+  }
+  .filter-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+  .filter-btn-ghost {
+    background: #fff;
+    color: #1a2b5f;
+    border: 1px solid #e8eaf0;
+    margin-left: auto;
   }
   .wq-body {
     display: grid;
@@ -2691,6 +2852,89 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
     margin: 0;
   }
 
+  /* ===== 复合题材料吸顶（v9 M3）===== */
+  .detail-material {
+    position: sticky;
+    top: -28px;
+    z-index: 3;
+    margin: -28px -32px 18px;
+    padding: 0 32px;
+    background: #fff;
+    border-bottom: 1px solid #e6ecf5;
+  }
+  .detail-material__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    cursor: pointer;
+  }
+  .detail-material__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a2b5f;
+  }
+  .detail-material__sub {
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    color: #7a8699;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .detail-material__toggle {
+    margin-left: auto;
+    font-size: 12.5px;
+    color: #1d4ed8;
+  }
+  .detail-material__body {
+    max-height: 42vh;
+    overflow-y: auto;
+    padding: 0 14px 12px;
+    margin-bottom: 12px;
+    border-left: 3px solid #dbe6f7;
+    font-size: 14px;
+    line-height: 1.9;
+    color: #33415a;
+    white-space: pre-wrap;
+  }
+  .detail-material__body img {
+    max-width: 100%;
+    height: auto;
+  }
+  .wq-gap-note {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px dashed #f0c36d;
+    border-radius: 8px;
+    background: #fffaf0;
+    color: #b45309;
+    font-size: 13px;
+  }
+  .wq-gap-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .wq-gap-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fff1f0;
+    color: #b42318;
+    font-size: 12px;
+  }
+  .wq-gap-tag.inline {
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .detail-option.is-placeholder .option-text {
+    color: #b45309;
+    font-style: italic;
+  }
+
   /* ===== 批改结果页 ===== */
   .review-result-page {
     position: fixed;
@@ -2806,4 +3050,108 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
     color: #1a2b5f;
   }
   .close-btn:hover { background: #cbd5e0; }
+  /* 手机/平板：200px 侧栏 + 300px 内容列在 390–834px 下会把标题、筛选标签
+     全部挤成竖排（2026-11-14 实拍），因此侧栏转横向滚动条、筛选栏换行。 */
+  @media (max-width: 900px) {
+    .wq-main {
+      padding: 16px 12px 96px;
+    }
+    .wq-filter-bar {
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+    .filter-group {
+      flex: 1 1 calc(50% - 5px);
+      min-width: 0;
+    }
+    .filter-group-search {
+      flex: 1 1 100%;
+    }
+    .filter-group label {
+      white-space: nowrap;
+    }
+    .filter-group select,
+    .filter-group .filter-input {
+      flex: 1;
+      min-width: 0;
+      width: 100%;
+    }
+    .filter-group .filter-input {
+      min-width: 0;
+    }
+    .wq-body {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+    }
+    .wq-nav {
+      flex-direction: row;
+      gap: 6px;
+      padding: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .wq-nav::-webkit-scrollbar {
+      display: none;
+    }
+    .nav-item {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .wq-content {
+      padding: 14px;
+    }
+    .section-top h3 {
+      font-size: 15px;
+      white-space: nowrap;
+    }
+    /* 详情弹窗手机端全屏：1400×800 的固定尺寸会让头部「单选题/难度/正确率/关闭」
+       挤成竖排（2026-11-14 实拍） */
+    .detail-material {
+      top: -14px;
+      margin: -14px -14px 14px;
+      padding: 0 14px;
+    }
+    .detail-material__body {
+      max-height: 38vh;
+    }
+    .wq-detail-modal {
+      width: 100vw;
+      max-width: 100vw;
+      height: 100vh;
+      max-height: 100vh;
+      border-radius: 0;
+    }
+    .wq-detail-header {
+      padding: 12px 14px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .detail-meta {
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .detail-type,
+    .detail-close-btn,
+    .detail-difficulty,
+    .detail-rate {
+      white-space: nowrap;
+    }
+    .detail-difficulty,
+    .detail-rate {
+      font-size: 12px;
+    }
+    .wq-detail-body {
+      padding: 16px 14px 96px;
+    }
+    .detail-stem {
+      font-size: 15px;
+      line-height: 1.9;
+      text-align: left;
+      letter-spacing: normal;
+    }
+  }
 </style>

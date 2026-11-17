@@ -29,6 +29,7 @@ from ..mineru_service import (
     is_enabled as mineru_is_enabled,
 )
 from ..text_parser import normalize_ocr_markdown
+from .pdf_underline import mark_page_blanks
 
 logger = logging.getLogger(__name__)
 
@@ -227,13 +228,27 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
             cur_qn = 0   # 跨页延续的当前题号（图片可能落在题干跨页的续页上）
 
             for page_no, page in enumerate(pdf.pages, 1):
+                # 表格只探测一次：既用于「原位插入表格行」，也用于排除表格网格线
+                # （否则横线识别会把每一格的下边框当成填空位）。
+                try:
+                    tables = page.find_tables()
+                except Exception:
+                    tables = []
                 # --- 取带坐标的行：既能按垂直位置定位题号，也便于按行索引插入占位符
                 try:
                     tlines = page.extract_text_lines() or []
                 except Exception:
                     tlines = []
                 if tlines:
-                    page_lines = [str(l.get('text', '')) for l in tlines]
+                    table_bboxes = []
+                    for _t in (tables or []):
+                        _b = getattr(_t, 'bbox', None)
+                        if _b:
+                            table_bboxes.append(_b)
+                    page_lines, blank_n = mark_page_blanks(
+                        page, tlines, page_width=page.width, table_bboxes=table_bboxes)
+                    if blank_n:
+                        logger.debug(f"[pdf-underline] 第 {page_no} 页还原 {blank_n} 处填空横线")
                     line_tops = [float(l.get('top', 0.0) or 0.0) for l in tlines]
                 else:
                     page_lines = (page.extract_text() or '').split('\n')
@@ -320,7 +335,6 @@ def _extract_text_from_pdf(buf: bytes, progress_cb=None) -> str:
                 # ★ J-2-1 修复：用 find_tables()（extract_tables 的底层，表格检测同源）
                 #   获取 Table 对象的 bbox 坐标，把表格行**原位插入** page_lines，
                 #   不再 parts.append 页尾追加——否则资料分析材料表内容会脱离所属材料块。
-                tables = page.find_tables()
                 for table in tables:
                     try:
                         tbl_top = float(table.bbox[1])  # bbox = (x0, top, x1, bottom)

@@ -329,6 +329,7 @@ def _upsert_question_core(db: Session, current_user: SysUser,
     db.flush()
 
     # 图片提取与保存（异常不回滚整题，仅跳过图片）
+    images = []
     try:
         # ★ 扫描范围必须含答案与解析。
         #   实测 254 份申论语料中 118 份含真实图片，且**绝大多数在答案区**
@@ -357,6 +358,26 @@ def _upsert_question_core(db: Session, current_user: SysUser,
             ))
     except Exception as img_err:
         logger.warning(f"图片提取失败 question_id={question.question_id}: {img_err}")
+
+    # 质量分（v8 M4）：六维打分，低于 60 入「待修正」清单（前端按 quality_flags 提示）。
+    # 放在图片入库之后，才能拿到真实图片数量判断「配图缺失」。
+    try:
+        from .quality import score_question
+
+        _quality = score_question({
+            'question_content': content,
+            'options': options,
+            'answer': answer,
+            'answer_analysis': question_data.get('answer_analysis') or question_data.get('analysis'),
+            'source': question_data.get('source'),
+            'year': question_data.get('exam_year') or question_data.get('year'),
+            'type_name': type_name,
+            'image_count': len(images),
+        })
+        question.quality_score = float(_quality['score'])
+        question.quality_flags = ','.join(_quality['flags']) or None
+    except Exception as q_err:
+        logger.warning(f"质量评分失败 question_id={question.question_id}: {q_err}")
 
     # 详细分类
     #
