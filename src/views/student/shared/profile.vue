@@ -2,8 +2,8 @@
 <template>
   <div class="profile-page">
     <div class="profile-nav"><NavBar /></div>
-    <main class="profile-main">
-      <!-- 顶部：学习周报 + 方案版本对比（主区第一屏可见） -->
+    <!-- 顶部洞察区：放在两栏容器之外，否则会被 100vh + overflow:hidden 裁掉（用户反馈「翻不了页」） -->
+    <section class="insights-bar">
       <OnboardingChecklist />
 
       <div class="top-insights">
@@ -19,6 +19,11 @@
           <span class="quick-link__desc">{{ l.desc }}</span>
         </button>
       </nav>
+    </section>
+
+    <main class="profile-main">
+      <!-- 顶部：学习周报 + 方案版本对比（主区第一屏可见） -->
+
 
       <!-- 左栏：个人资料 + 成就/等级/设置 -->
       <div class="side-col">
@@ -771,6 +776,17 @@ function handleLogout() {
 .deco-chip.is-expired .deco-expire { color: #dc2626; }
 
 /* 2026-11-07：左右两栏各自独立滚动，顶部导航固定后可收纳更多内容 */
+.insights-bar {
+  max-width: 1300px;
+  margin: 0 auto;
+  padding: 20px 32px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+@media (max-width: 900px) {
+  .insights-bar { padding: 14px 16px 0; }
+}
 .profile-main {
   height: calc(100vh - 64px);
   overflow: hidden;
