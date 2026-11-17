@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 砺安题库 - 路由配置（三端分离）
  */
 import {
@@ -13,6 +13,7 @@ import {
   isDeviceAgnosticPath,
   pcPathForDevicePath,
   resolveTeacherDevicePath,
+  resolveUiDevice,
   swapDevicePrefix,
   unauthorizedReasonForDevice,
 } from './loginPolicy';
@@ -1032,13 +1033,17 @@ function routePathExists(path: string): boolean {
 }
 
 router.beforeEach((to, _from, next) => {
-  const detected = detectDevice();  // 兼容手机浏览器的“桌面模式”/旧 WebView：UA 被判为 pc 时，仍按视口宽度回到移动布局
-  const device: 'pc' | 'mobile' | 'tablet' =
-    detected === 'pc' && window.innerWidth <= 1024
-      ? window.innerWidth >= 768
-        ? 'tablet'
-        : 'mobile'
-      : detected;
+  // 设备裁决（D-39，2026-11-17）：detectDevice() 只看 UA / 宽度 / 触摸点数，
+  // 会把「882px 宽的普通电脑窗口」降级成平板/手机（实测踩过）。
+  // 这里叠加指针类型再裁决一次，口径见 loginPolicy.resolveUiDevice。
+  const mq = (q: string) =>
+    typeof window.matchMedia === 'function' ? window.matchMedia(q).matches : false;
+  const device: 'pc' | 'mobile' | 'tablet' = resolveUiDevice({
+    detected: detectDevice(),
+    innerWidth: window.innerWidth,
+    coarsePointer: mq('(pointer: coarse)'),
+    finePointer: mq('(any-pointer: fine)')
+  });
 
   // 0) 设备 × 界面一致性（D-28，2026-11-16）
   //    实测缺陷：电脑打开 /#/tablet/home、/#/mobile/teacher/papers 会**直接渲染平板/手机界面**；
@@ -1195,3 +1200,4 @@ router.beforeEach((to, _from, next) => {
 });
 
 export default router;
+

@@ -183,3 +183,51 @@ export function isDeviceAgnosticPath(path: string): boolean {
   return DEVICE_AGNOSTIC_PATHS.includes(normalizePath(path))
 }
 
+/* ==========================================================================
+ * 设备判定的最终修正（D-39，2026-11-17）
+ *
+ * 实测缺陷：一台正常电脑（Windows + Edge，UA 无 Touch、maxTouchPoints=0、
+ * innerWidth=882）被判成「平板」，打开 /#/tablet/home 时停在平板登录页。
+ * 根因：`router/index.ts` 为兼容「手机浏览器桌面模式」写了一句降级：
+ *   `detected === 'pc' && innerWidth <= 1024` → 平板/手机，
+ * 这句**没有任何触摸/指针条件**，任何窄一点的桌面窗口都会被降级。
+ *
+ * 修正口径（不再让宽度单独决定设备）：
+ *   ① UA 判平板、但存在精细指针（鼠标/触控板）且主输入不是手指 → 纠正回电脑；
+ *   ② 窄窗口降级只对「纯手指设备」生效（pointer: coarse 且无 any-pointer: fine）；
+ *   ③ 其它情况尊重 detectDevice() 的原判定。
+ *
+ * `src/utils/device.ts` 是 R4 冻结文件，本函数在守卫侧做最终裁决，不改它。
+ * ========================================================================== */
+
+export type UiDevice = 'pc' | 'tablet' | 'mobile'
+
+export interface UiDeviceSignals {
+  /** `detectDevice()` 的原始判定 */
+  detected: UiDevice
+  /** `window.innerWidth` */
+  innerWidth: number
+  /** `(pointer: coarse)`：主输入是否为手指 */
+  coarsePointer: boolean
+  /** `(any-pointer: fine)`：是否存在鼠标/触控板 */
+  finePointer: boolean
+}
+
+export function resolveUiDevice(signals: UiDeviceSignals): UiDevice {
+  const { detected, innerWidth, coarsePointer, finePointer } = signals
+
+  // ① 触屏笔记本（UA 判成平板，但实际有鼠标/触控板）→ 纠正回电脑
+  if (detected === 'tablet' && finePointer && !coarsePointer) {
+    return 'pc'
+  }
+
+  // ② 窄窗口降级：只在「纯手指设备」上生效
+  if (detected === 'pc' && innerWidth <= 1024 && coarsePointer && !finePointer) {
+    return innerWidth >= 768 ? 'tablet' : 'mobile'
+  }
+
+  // ③ 其它情况尊重原判定
+  return detected
+}
+
+
