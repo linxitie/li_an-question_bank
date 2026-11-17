@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>预期效果 mock · P2–P5（三端登录准入）</title>
+<style>
+  :root {
+    --navy:#163a5f; --navy2:#102a47; --ink:#1f2d3d; --muted:#7a8797; --line:#e6ebf2;
+    --bg:#f2f5f9; --card:#fff; --ok:#2f9e6e; --warn:#c97a2b; --danger:#d64545; --accent:#2f6bd8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.55 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink);background:var(--bg)}
+  .state{display:none}
+  .state.on{display:block}
+  .capbar{background:var(--navy2);color:#fff;font-size:12px;padding:6px 12px;letter-spacing:.3px}
+  .page{padding:18px}
+  .row{display:flex;align-items:center;gap:10px}
+  .between{justify-content:space-between}
+  .topbar{background:var(--navy);color:#fff;border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .topbar b{font-size:15px;letter-spacing:.5px}
+  .topbar span{font-size:12px;opacity:.85}
+  .grid{display:grid;gap:12px}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  @media(max-width:520px){.g4,.g3{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .kpi b{display:block;font-size:22px;color:var(--navy)}
+  .kpi span{font-size:12px;color:var(--muted)}
+  .entry{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+  .entry .t{font-weight:600;font-size:14px}
+  .entry .d{font-size:12px;color:var(--muted)}
+  .tag{font-size:11px;padding:2px 8px;border-radius:999px;background:#eaf4ee;color:var(--ok)}
+  .tag.warn{background:#fdf0e6;color:var(--warn)}
+  .tag.gray{background:#eef1f6;color:var(--muted)}
+  .tag.red{background:#fdeeee;color:var(--danger)}
+  .note{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;color:var(--muted);font-size:12px;background:#fbfcfe}
+  .list{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .it{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid var(--line);font-size:13px}
+  .it:last-child{border-bottom:0}
+  .it .meta{color:var(--muted);font-size:12px}
+  .search{border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--muted);background:#fff;font-size:13px}
+  h3{margin:0 0 10px;font-size:15px}
+  .barwrap{display:flex;align-items:flex-end;gap:14px;height:110px;padding:10px 4px 0}
+  .bar{flex:1;background:linear-gradient(180deg,#3f7ad6,#163a5f);border-radius:6px 6px 0 0;position:relative}
+  .bar span{position:absolute;top:-18px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted)}
+  .xlabel{display:flex;gap:14px;padding:6px 4px 0}
+  .xlabel span{flex:1;text-align:center;font-size:11px;color:var(--muted)}
+
+  /* 登录页（P2 deny 用） */
+  .login{display:grid;grid-template-columns:.82fr 1fr;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 16px 40px rgba(16,42,71,.14)}
+  .brand{background:linear-gradient(160deg,var(--navy2),var(--navy));color:#fff;padding:26px 22px;display:flex;flex-direction:column;justify-content:center;gap:10px}
+  .brand h2{margin:0;font-size:21px}
+  .brand p{margin:0;font-size:12px;color:rgba(255,255,255,.72)}
+  .brand ul{margin:4px 0 0;padding:0;list-style:none;font-size:12px;color:rgba(255,255,255,.86)}
+  .brand li{margin:5px 0}
+  .form{padding:22px}
+  .seg{display:flex;background:#f1f4f9;border-radius:9px;padding:4px;margin-bottom:12px}
+  .seg span{flex:1;text-align:center;padding:6px 0;font-size:12px;color:var(--muted);border-radius:7px}
+  .seg span.on{background:#fff;color:var(--navy);font-weight:600;box-shadow:0 1px 3px rgba(16,42,71,.12)}
+  .alert{border:1px solid #f3c9c9;background:#fdf1f1;color:var(--danger);border-radius:9px;padding:9px 11px;font-size:12px;margin-bottom:12px}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 5px}
+  .input{border:1px solid var(--line);border-radius:9px;padding:10px 11px;font-size:13px}
+  .btn{border:0;border-radius:9px;padding:10px 14px;font-size:14px;background:var(--navy);color:#fff;cursor:pointer}
+  .btn.ghost{background:#eef2f8;color:var(--navy)}
+  .mask{position:absolute;inset:0;background:rgba(16,42,71,.42);display:grid;place-items:center;padding:20px;border-radius:16px}
+  .dialog{background:#fff;border-radius:14px;padding:18px;width:min(400px,86%)}
+  .dialog h3{margin:0 0 6px}
+  .dialog p{margin:0 0 14px;font-size:13px;color:var(--muted)}
+  .dialog .actions{display:flex;gap:8px}
+  .dialog .actions .btn{flex:1}
+  .rel{position:relative}
+
+  /* 验收矩阵（P5） */
+  .mx{width:100%;border-collapse:separate;border-spacing:8px}
+  .mx th{font-size:12px;color:var(--muted);font-weight:600}
+  .mx td{border-radius:10px;padding:14px;text-align:center;font-size:13px;font-weight:600}
+  .mx td.pass{background:#e9f6ef;color:var(--ok);border:1px solid #cfe9da}
+  .mx td.fail{background:#fdeeee;color:var(--danger);border:1px solid #f3cfcf}
+  .mx td.role{background:#fff;border:1px solid var(--line);text-align:left;color:var(--navy)}
+
+  /* 手机框：Edge headless 最小布局宽度 504px，无法真正 390 渲染；
+     这里用固定 390 宽的"设备框"居中展示，截图取 430×932 即可看到完整手机版式 */
+  .device{width:390px;margin:0 auto;background:var(--bg);border-radius:22px;overflow:hidden;
+          box-shadow:0 20px 50px rgba(16,42,71,.18);border:1px solid #dfe6ef}
+  .device .page{padding:12px}
+  /* 手机框内强制 2 列，避免被外层 <=520 媒体查询压成 1 列后显得细长 */
+  .device .g2,.device .g3,.device .g4{grid-template-columns:repeat(2,1fr)}
+  html,body{overflow-x:hidden}
+  .it{flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<!-- ========== P2-a 管理员在平板被拒 ========== -->
+<section class="state" id="p2-deny">
+  <div class="capbar">预期效果 · P2：管理员在平板/手机端提交 → 403 红字 + 弹窗「去电脑端登录」（模板零改动，仅 script）</div>
+  <div class="page">
+    <div class="rel login">
+      <div class="brand">
+        <div style="font-size:24px">🛡️</div>
+        <h2>砺安题库</h2><p>公安联考智能备考平台</p>
+        <ul><li>✅ 海量题库，精准练习</li><li>✅ 智能组卷，高效备考</li><li>✅ 多端同步，随时随地</li></ul>
+      </div>
+      <div class="form">
+        <div class="seg"><span class="on">登录</span><span>扫码登录</span></div>
+        <div class="alert">管理员仅支持电脑端登录，请改用电脑访问</div>
+        <label>账号</label><div class="input">cbrycc</div>
+        <label>密码</label><div class="input">••••••••</div>
+        <div class="row between" style="font-size:12px;color:var(--muted);margin:12px 0 14px">
+          <span>☑ 记住我</span><span style="color:var(--navy)">忘记密码？</span>
+        </div>
+        <div class="btn" style="text-align:center">登 录</div>
+      </div>
+      <div class="mask">
+        <div class="dialog">
+          <h3>管理员仅支持电脑端登录</h3>
+          <p>当前是平板端。请改用电脑访问 <b>/#/login</b>；本页不会保留登录状态。</p>
+          <div class="actions"><div class="btn" style="text-align:center">去电脑端登录</div><div class="btn ghost" style="text-align:center">知道了</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== P2-b 教师登录后落地（平板） ========== -->
+<section class="state" id="p2-teacher-home">
+  <div class="capbar">预期效果 · P2/P3：教师在平板登录成功 → 落地「教师工作台（平板）」而不是学生首页、也不再被弹到"仅限学生使用"</div>
+  <div class="page">
+    <div class="topbar"><b>教师工作台 · 平板</b><span>ycc5678 ｜ 一班 · 法学</span></div>
+    <div class="grid g4" style="margin-bottom:12px">
+      <div class="card kpi"><b>3</b><span>待批作业</span></div>
+      <div class="card kpi"><b>2</b><span>待改试卷</span></div>
+      <div class="card kpi"><b>48</b><span>班级人数</span></div>
+      <div class="card kpi"><b>92%</b><span>本周提交率</span></div>
+    </div>
+    <div class="grid g3">
+      <div class="card entry"><span class="t">📚 题目管理</span><span class="d">浏览 / 搜索 / 预览</span><span class="tag">设备端可用</span></div>
+      <div class="card entry"><span class="t">📝 试卷</span><span class="d">查看列表与状态</span><span class="tag">设备端可用</span></div>
+      <div class="card entry"><span class="t">📊 成绩分析</span><span class="d">班级对比 / 知识点</span><span class="tag">设备端可用</span></div>
+      <div class="card entry"><span class="t">✏️ 组卷 / 编辑试卷</span><span class="d">需要键盘与双栏工作台</span><span class="tag warn">请到电脑端</span></div>
+      <div class="card entry"><span class="t">✅ 批改作业 / 判分</span><span class="d">需逐题打分</span><span class="tag warn">请到电脑端</span></div>
+      <div class="card entry"><span class="t">📤 批量导入题目</span><span class="d">需上传文件与校验</span><span class="tag warn">请到电脑端</span></div>
+    </div>
+    <div class="note" style="margin-top:12px">本期设备端为「只读优先」（D-10）：查看类可用，写操作明示"请到电脑端"，不做静默失败。</div>
+  </div>
+</section>
+
+<!-- ========== P2-c 教师手机端首页 ========== -->
+<section class="state" id="p2-mobile-teacher">
+  <div class="capbar">预期效果 · P2：教师手机端首页（竖屏版式，390px 手机框）</div>
+  <div class="page" style="padding:14px 18px">
+    <div class="device">
+      <div class="page">
+        <div class="topbar" style="padding:10px 12px;margin-bottom:10px"><b>教师工作台</b><span>ycc5678</span></div>
+        <div class="grid g2" style="margin-bottom:10px">
+          <div class="card kpi"><b>3</b><span>待批作业</span></div>
+          <div class="card kpi"><b>2</b><span>待改试卷</span></div>
+          <div class="card kpi"><b>48</b><span>班级人数</span></div>
+          <div class="card kpi"><b>92%</b><span>提交率</span></div>
+        </div>
+        <div class="list">
+          <div class="it"><span>📚 题目管理</span><span class="tag">可浏览</span></div>
+          <div class="it"><span>📝 试卷列表</span><span class="tag">可查看</span></div>
+          <div class="it"><span>📊 成绩概览</span><span class="tag">可查看</span></div>
+          <div class="it"><span>✏️ 组卷 / 批改 / 导入</span><span class="tag warn">请到电脑端</span></div>
+        </div>
+        <div class="note" style="margin-top:10px">手机端只保留 3 个只读入口，避免小屏误操作。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== P3 题目列表（平板） ========== -->
+<section class="state" id="p3-questions">
+  <div class="capbar">预期效果 · P3：教师平板端「题目管理」只读列表（搜索 + 过滤 + 预览，无编辑）</div>
+  <div class="page">
+    <div class="topbar"><b>题目管理 · 平板</b><span>只读</span></div>
+    <div class="row" style="margin-bottom:10px;gap:8px">
+      <div class="search" style="flex:1">🔍 搜索题干 / 知识点…</div>
+      <div class="search">科目：公专 ▾</div>
+      <div class="search">题型：单选 ▾</div>
+    </div>
+    <div class="list">
+      <div class="it"><span>1. 所谓法的渊源，是指法的具体外部表现形态…</span><span class="meta">公专 · 单选 <span class="tag">预览</span></span></div>
+      <div class="it"><span>2. 公安机关的人民警察因履行职责的紧急需要…</span><span class="meta">公专 · 单选 <span class="tag">预览</span></span></div>
+      <div class="it"><span>3. 关于治安管理处罚的适用，下列说法正确的是…</span><span class="meta">公专 · 多选 <span class="tag">预览</span></span></div>
+      <div class="it"><span>4. 简述公安工作的基本方针及其现实意义</span><span class="meta">公专 · 简答 <span class="tag gray">无预览</span></span></div>
+      <div class="it"><span>5. 下列不属于我国法律渊源的是…</span><span class="meta">公专 · 单选 <span class="tag">预览</span></span></div>
+    </div>
+    <div class="note" style="margin-top:10px">分页 20 条/页；编辑入口在电脑端（`/teacher/questions`）。</div>
+  </div>
+</section>
+
+<!-- ========== P4 试卷列表（平板） ========== -->
+<section class="state" id="p4-papers">
+  <div class="capbar">预期效果 · P4：教师平板端「试卷」只读列表（状态可见，编辑引导电脑端）</div>
+  <div class="page">
+    <div class="topbar"><b>试卷 · 平板</b><span>只读</span></div>
+    <div class="list">
+      <div class="it"><span>2016 江西招警《人民警察基础知识》（部分）</span><span class="meta">97 题 · 97 分 <span class="tag">已发布</span></span></div>
+      <div class="it"><span>行测 · 资料分析专项（20 题）</span><span class="meta">20 题 · 40 分 <span class="tag gray">草稿</span></span></div>
+      <div class="it"><span>公专 · 治安管理处罚法（50 题）</span><span class="meta">50 题 · 100 分 <span class="tag warn">待审批</span></span></div>
+      <div class="it"><span>申论 · 综合分析（3 题）</span><span class="meta">3 题 · 60 分 <span class="tag">已发布</span></span></div>
+    </div>
+    <div class="note" style="margin-top:10px">「组卷 / 编辑 / 发布审批」在电脑端双栏工作台完成；本页只读，避免误改已发布卷。</div>
+  </div>
+</section>
+
+<!-- ========== P4 成绩概览（平板） ========== -->
+<section class="state" id="p4-scores">
+  <div class="capbar">预期效果 · P4：教师平板端「成绩概览」（班级均分 + 分布 + 名单，只读）</div>
+  <div class="page">
+    <div class="topbar"><b>成绩概览 · 平板</b><span>一班</span></div>
+    <div class="grid g3" style="margin-bottom:12px">
+      <div class="card kpi"><b>72.4</b><span>班级均分</span></div>
+      <div class="card kpi"><b>96</b><span>最高分</span></div>
+      <div class="card kpi"><b>41</b><span>最低分</span></div>
+    </div>
+    <div class="card">
+      <h3>分数段分布</h3>
+      <div class="barwrap">
+        <div class="bar" style="height:36%"><span>4</span></div>
+        <div class="bar" style="height:58%"><span>9</span></div>
+        <div class="bar" style="height:88%"><span>18</span></div>
+        <div class="bar" style="height:64%"><span>12</span></div>
+        <div class="bar" style="height:24%"><span>5</span></div>
+      </div>
+      <div class="xlabel"><span>&lt;60</span><span>60–69</span><span>70–79</span><span>80–89</span><span>≥90</span></div>
+    </div>
+    <div class="list" style="margin-top:12px">
+      <div class="it"><span>张三</span><span class="meta">96 分 · 第 1 名</span></div>
+      <div class="it"><span>李四</span><span class="meta">91 分 · 第 2 名</span></div>
+      <div class="it"><span>王五</span><span class="meta">88 分 · 第 3 名</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========== P5 验收矩阵 ========== -->
+<section class="state" id="p5-matrix">
+  <div class="capbar">预期效果 · P5：三端登录验收矩阵（3 角色 × 3 端 = 9 组，全部要真机取证）</div>
+  <div class="page">
+    <div class="card">
+      <h3>登录准入验收矩阵</h3>
+      <table class="mx">
+        <tr><th></th><th>电脑端 web</th><th>平板 tablet</th><th>手机 mobile</th></tr>
+        <tr><td class="role">学生 student<br><small>202516001</small></td><td class="pass">✅ 200</td><td class="pass">✅ 200</td><td class="pass">✅ 200</td></tr>
+        <tr><td class="role">教师 teacher<br><small>ycc5678</small></td><td class="pass">✅ 200</td><td class="pass">✅ 200（本期新增）</td><td class="pass">✅ 200（本期新增）</td></tr>
+        <tr><td class="role">管理员 admin<br><small>cbrycc</small></td><td class="pass">✅ 200</td><td class="fail">⛔ 403 DEVICE_FORBIDDEN</td><td class="fail">⛔ 403 DEVICE_FORBIDDEN</td></tr>
+      </table>
+      <div class="note" style="margin-top:12px">
+        额外取证：拒绝响应含 <b>error.code=DEVICE_FORBIDDEN</b> 与 <b>x-auth-deny</b> 头、不含 access_token；
+        教师设备端落地 <b>/tablet|/mobile/teacher/home</b>；学生三端零回归（首屏 + 关键接口 200）。
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const state = new URLSearchParams(location.search).get('state') || 'p2-deny';
+  const el = document.getElementById(state) || document.getElementById('p2-deny');
+  el.classList.add('on');
+  document.title = 'mock · ' + state;
+  // 供截图脚本读取内容真实高度（避免图底部留大片空白）
+  requestAnimationFrame(() => {
+    document.title = 'MOCK_STATE=' + state + ';H=' + document.documentElement.scrollHeight;
+  });
+</script>
+</body>
+</html>

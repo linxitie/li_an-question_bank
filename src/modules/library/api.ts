@@ -331,6 +331,8 @@ export interface LibraryExamState {
 /** C2b：改信息的提交体（全部非必填；null / 空串 = 清除该项） */
 export interface MaterialMetaPayload {
   title?: string;
+  /** S4（2026-11-17）：科目可改（原来前端从不传、后端也无从更新） */
+  subject?: 'xingce' | 'shenlun' | 'gongzhuan';
   category?: string | null;
   year?: number | null;
   region_code?: string | null;

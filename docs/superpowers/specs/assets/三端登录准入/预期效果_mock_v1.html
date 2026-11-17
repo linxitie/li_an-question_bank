@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>预期效果 mock · 三端登录准入（v1）</title>
+<style>
+  :root {
+    --navy: #163a5f; --navy-deep: #102a47; --ink: #1f2d3d; --muted: #7a8797;
+    --line: #e6ebf2; --bg: #f4f6fa; --card: #fff; --danger: #d64545; --ok: #2f9e6e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.6 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+         color: var(--ink); background: var(--bg); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  .tabs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  .tabs button { border: 1px solid var(--line); background: #fff; color: var(--ink); padding: 9px 14px;
+                 border-radius: 999px; cursor: pointer; font-size: 14px; }
+  .tabs button.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .stage { display: grid; grid-template-columns: 1.05fr 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .stage { grid-template-columns: 1fr; } }
+
+  /* 平板登录卡（与 tablet_login.vue 视觉一致：左品牌 + 右表单） */
+  .login { display: grid; grid-template-columns: 0.82fr 1fr; background: var(--card);
+           border-radius: 18px; overflow: hidden; box-shadow: 0 18px 44px rgba(16,42,71,.14); }
+  .brand { background: linear-gradient(160deg, var(--navy-deep), var(--navy)); color: #fff;
+           padding: 34px 26px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+  .brand .logo { width: 54px; height: 54px; border-radius: 14px; background: rgba(255,255,255,.14);
+                 display: grid; place-items: center; font-size: 26px; }
+  .brand h2 { margin: 0; font-size: 24px; letter-spacing: 1px; }
+  .brand p { margin: 0; color: rgba(255,255,255,.72); font-size: 13px; }
+  .brand ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: 13px; color: rgba(255,255,255,.86); }
+  .brand li { margin: 7px 0; }
+  .form { padding: 28px 26px; }
+  .seg { display: flex; background: #f1f4f9; border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+  .seg span { flex: 1; text-align: center; padding: 7px 0; font-size: 13px; border-radius: 8px; color: var(--muted); }
+  .seg span.on { background: #fff; color: var(--navy); box-shadow: 0 1px 4px rgba(16,42,71,.12); font-weight: 600; }
+  .alert { display: none; border: 1px solid #f3c9c9; background: #fdf1f1; color: var(--danger);
+           border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
+  .alert.show { display: block; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+  .input { border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; font-size: 14px; color: var(--ink); }
+  .row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; margin: 14px 0 18px; }
+  .row .links { color: var(--navy); }
+  .btn { width: 100%; border: 0; border-radius: 10px; padding: 12px; font-size: 15px;
+         background: var(--navy); color: #fff; cursor: pointer; }
+  .btn.ghost { background: #eef2f8; color: var(--navy); margin-top: 10px; }
+  .hint { text-align: center; color: var(--muted); font-size: 12px; margin-top: 14px; }
+
+  /* 弹窗（管理员被拒时） */
+  .mask { display: none; position: fixed; inset: 0; background: rgba(16,42,71,.45);
+          place-items: center; padding: 20px; }
+  .mask.show { display: grid; }
+  .dialog { background: #fff; border-radius: 16px; width: min(420px, 94vw); padding: 22px; box-shadow: 0 24px 60px rgba(0,0,0,.25); }
+  .dialog h3 { margin: 0 0 8px; font-size: 17px; }
+  .dialog p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+  .dialog .actions { display: flex; gap: 10px; }
+  .dialog .actions button { flex: 1; }
+
+  /* 教师设备端首页示意 */
+  .phone { background: #fff; border-radius: 20px; border: 1px solid var(--line); overflow: hidden;
+           box-shadow: 0 18px 44px rgba(16,42,71,.10); }
+  .phone .bar { background: var(--navy); color: #fff; padding: 12px 16px; font-size: 14px;
+                display: flex; justify-content: space-between; }
+  .phone .body { padding: 14px; display: grid; gap: 12px; }
+  .kpi { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .kpi div { background: #f4f7fc; border-radius: 12px; padding: 12px; text-align: center; }
+  .kpi b { display: block; font-size: 20px; color: var(--navy); }
+  .kpi span { font-size: 12px; color: var(--muted); }
+  .list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .list .it { padding: 11px 12px; border-bottom: 1px solid var(--line); font-size: 13px;
+              display: flex; justify-content: space-between; }
+  .list .it:last-child { border-bottom: 0; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eaf4ee; color: var(--ok); }
+  .tag.warn { background: #fdf0e6; color: #c97a2b; }
+  .readonly { font-size: 12px; color: var(--muted); text-align: center; padding: 10px;
+              border: 1px dashed var(--line); border-radius: 10px; }
+  .note { grid-column: 1 / -1; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .note b { color: var(--navy); }
+  .note ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink); font-size: 14px; }
+  .cap { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>预期效果 mock · 三端登录准入 v1</h1>
+  <div class="sub">
+    这是**预期效果示意**（静态 HTML，非真实页面截图）。对应方案：
+    <code>docs/superpowers/specs/三端登录准入与教师三端可用_方案_v1.md</code>。
+    每个按钮切换一种角色登录结果，用来确认"学生/教师三端可用、管理员仅电脑端"的交互口径。
+  </div>
+
+  <div class="tabs">
+    <button class="on" data-case="teacher">① 教师登录（平板）→ 放行</button>
+    <button data-case="admin">② 管理员登录（平板）→ 拒绝 + 引导</button>
+    <button data-case="student">③ 学生登录（手机）→ 现状不变</button>
+  </div>
+
+  <div class="stage">
+    <div>
+      <div class="login">
+        <div class="brand">
+          <div class="logo">🛡️</div>
+          <h2>砺安题库</h2>
+          <p>公安联考智能备考平台</p>
+          <ul>
+            <li>✅ 海量题库，精准练习</li>
+            <li>✅ 智能组卷，高效备考</li>
+            <li>✅ 多端同步，随时随地</li>
+          </ul>
+        </div>
+        <div class="form">
+          <div class="seg"><span class="on">登录</span><span>扫码登录</span></div>
+          <div class="alert" id="alert">管理员仅支持电脑端登录，请改用电脑访问</div>
+          <label>账号</label>
+          <div class="input" id="account">ycc5678</div>
+          <label>密码</label>
+          <div class="input">••••••••</div>
+          <div class="row"><span>☑ 记住我</span><span class="links">忘记密码？</span></div>
+          <button class="btn" id="submit">登 录</button>
+          <div class="hint">还没有账号？请联系管理员分配</div>
+        </div>
+      </div>
+      <p class="cap" id="cap">① 教师输入 ycc5678/ycc5678 → 直接进入教师设备端首页（见右侧）。</p>
+    </div>
+
+    <div class="phone" id="target">
+      <div class="bar"><span>教师工作台 · 平板</span><span>ycc5678</span></div>
+      <div class="body">
+        <div class="kpi">
+          <div><b>3</b><span>待批作业</span></div>
+          <div><b>2</b><span>待改试卷</span></div>
+          <div><b>48</b><span>班级人数</span></div>
+        </div>
+        <div class="list">
+          <div class="it"><span>题目管理</span><span class="tag">可浏览</span></div>
+          <div class="it"><span>试卷编辑</span><span class="tag warn">请到电脑端</span></div>
+          <div class="it"><span>成绩分析</span><span class="tag">可查看</span></div>
+          <div class="it"><span>作业批改</span><span class="tag warn">请到电脑端</span></div>
+        </div>
+        <div class="readonly">设备端本期为「只读优先」：查看类可用，写操作引导回电脑端（D-10 决策）</div>
+      </div>
+    </div>
+
+    <div class="note">
+      <b>这套 mock 想让你确认的 4 件事</b>
+      <ul>
+        <li><b>教师</b>在平板/手机不再被 403 拦住，登录后落地「教师设备端首页」（右侧示意）。</li>
+        <li><b>管理员</b>在平板/手机提交后：红字说明 + 弹窗「去电脑端登录」按钮（点按钮跳 <code>/#/login</code>）。</li>
+        <li><b>学生</b>三端行为与现在完全一致（本次不改学生端）。</li>
+        <li>设备端<b>写操作</b>（组卷/批改）本期不开放，用「请到电脑端」标签明示，不做静默失败。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="mask" id="mask">
+  <div class="dialog">
+    <h3>管理员仅支持电脑端登录</h3>
+    <p>当前是平板/手机端。请改用电脑访问 <code>/#/login</code>；本页不会保留登录状态。</p>
+    <div class="actions">
+      <button class="btn" id="goPc">去电脑端登录</button>
+      <button class="btn ghost" id="close">知道了</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const CASES = {
+    teacher: { account: 'ycc5678', alert: false, mask: false,
+      cap: '① 教师输入 ycc5678/ycc5678 → 直接进入教师设备端首页（见右侧）。' },
+    admin: { account: 'cbrycc', alert: true, mask: true,
+      cap: '② 管理员输入 cbrycc → 后端 403（DEVICE_FORBIDDEN）+ 弹窗引导去电脑端；本页不保留登录态。' },
+    student: { account: '202516001', alert: false, mask: false,
+      cap: '③ 学生输入 202516001 → 与现状一致（手机端首页），本次不改学生端。' },
+  };
+  const $ = (id) => document.getElementById(id);
+  const alertBox = $('alert'), mask = $('mask'), target = $('target');
+  const STUDENT_TARGET = `<div class="bar"><span>手机端首页</span><span>202516001</span></div>
+    <div class="body">
+      <div class="kpi"><div><b>0/40</b><span>今日目标</span></div><div><b>1</b><span>连续学习</span></div><div><b>5</b><span>做题记录</span></div></div>
+      <div class="list">
+        <div class="it"><span>每日金句</span><span class="tag">可换一句</span></div>
+        <div class="it"><span>每日新闻</span><span class="tag">可浏览</span></div>
+        <div class="it"><span>最近做题记录</span><span class="tag">5 条</span></div>
+      </div>
+      <div class="readonly">学生端三端保持不变（本次零改动，回归验收即可）</div>
+    </div>`;
+
+  let current = 'teacher';
+  function render(showMask) {
+    const c = CASES[current];
+    $('account').textContent = c.account;
+    alertBox.classList.toggle('show', c.alert);
+    $('cap').textContent = c.cap;
+    if (current === 'student') target.innerHTML = STUDENT_TARGET;
+    mask.classList.toggle('show', !!showMask && c.mask);
+  }
+  document.querySelectorAll('.tabs button').forEach((b) => {
+    b.onclick = () => {
+      document.querySelectorAll('.tabs button').forEach((x) => x.classList.remove('on'));
+      b.classList.add('on');
+      current = b.dataset.case;
+      render(false);
+    };
+  });
+  $('submit').onclick = () => render(true);
+  $('close').onclick = () => mask.classList.remove('show');
+  $('goPc').onclick = () => { mask.classList.remove('show'); alert('（示意）跳转 /#/login'); };
+  render(false);
+</script>
+</body>
+</html>

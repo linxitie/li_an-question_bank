@@ -272,6 +272,9 @@ def check_reconcile() -> None:
 # 公共路由：不需要登录/角色即可访问，故不要求 roles
 ROUTE_WHITELIST = {'/login', '/scan', '/unauthorized', '/:pathMatch(.*)*'}
 MOBILE_PREFIXES = ('/tablet', '/mobile')
+# 设备端（平板/手机）允许的页面角色：学生与教师；管理员必须电脑端
+# （三端登录方案 2026-11-16；与 backend/app/core/device_policy.py 的 ALWAYS_PC_ONLY_ROLES 对齐）
+DEVICE_ALLOWED_ROLES = {'student', 'teacher'}
 _ROLES_RE = re.compile(r'\broles\s*:\s*\[([^\]]*)\]')
 _PATH_RE = re.compile(r'\bpath\s*:\s*[\'"]([^\'"]+)[\'"]')
 
@@ -330,13 +333,15 @@ def parse_route_records(text: str) -> list[dict]:
                 i += 1
                 continue
             own = _ROLES_RE.search(body)
-            roles = ([x.strip('\'"') for x in own.group(1).split(',') if x.strip()]
+            # 注意：先 strip 空白再 strip 引号。多角色写法 `roles: ['student', 'teacher']`
+            # 的第二项带前导空格，只 strip 引号会得到 " 'teacher'"（历史 bug，仅单角色时不暴露）。
+            roles = ([x.strip().strip('\'"') for x in own.group(1).split(',') if x.strip()]
                      if own else [])
             if not roles:
                 for parent in reversed(stack):
                     pm = _ROLES_RE.search(array[parent:i + 1])
                     if pm:
-                        roles = [x.strip('\'"') for x in pm.group(1).split(',') if x.strip()]
+                        roles = [x.strip().strip('\'"') for x in pm.group(1).split(',') if x.strip()]
                         break
             records.append({
                 'path': path_match.group(1),
@@ -356,11 +361,15 @@ def check_routes_roles() -> None:
     pages = [r for r in records if r['has_component']]
     missing = [r['path'] for r in pages
                if r['path'] not in ROUTE_WHITELIST and not r['roles']]
+    # 设备端（/tablet、/mobile）只允许学生与教师；管理员必须电脑端（三端登录方案，2026-11-16）。
+    # 旧规则是「设备端必须恰好 ['student']」；P2 起教师也可在设备端，故放宽为"角色 ⊆ {student,teacher}"，
+    # 但**不允许 admin 出现在设备端路由**（与后端 device_policy 的硬约束一致）。
     bad_device = [r['path'] for r in pages
-                  if r['path'].startswith(MOBILE_PREFIXES) and r['roles'] != ['student']]
+                  if r['path'].startswith(MOBILE_PREFIXES)
+                  and (not r['roles'] or set(r['roles']) - DEVICE_ALLOWED_ROLES)]
     ok = not missing and not bad_device
     detail = (f'{len(missing)}/{len(pages)} 条页面路由未声明 roles；'
-              f'mobile/tablet 违规 {len(bad_device)} 条')
+              f'mobile/tablet 违规 {len(bad_device)} 条（允许角色 {sorted(DEVICE_ALLOWED_ROLES)}）')
     if missing:
         detail += '；未声明：' + ', '.join(missing[:5])
     if bad_device:

@@ -282,7 +282,8 @@ import {
   ArrowRight,
   Calendar,
   Timer,
-  Refresh
+  Refresh,
+  Reading
 } from '@vtj/icons';
 import { useProvider } from '@vtj/renderer';
 

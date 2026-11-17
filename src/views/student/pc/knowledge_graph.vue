@@ -31,7 +31,7 @@
         </header>
         <p class="kg-panel__meta">关联考点 {{ selected.degree }} 个</p>
         <div class="kg-panel__chips">
-          <button v-for="n in selected.neighbors" :key="(n.rel || 'rel') + n.id"
+          <button v-for="n in selected.neighbors" :key="(n.rel ?? '') + n.id"
                   class="kg-chip" :class="'rel-' + n.rel"
                   :title="relLabel(n.rel)"
                   @click="selected = { id: n.id, name: n.name, degree: 0, neighbors: [] }">
