@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page" :class="`theme-${activeSubject}`">
     <header class="topbar">
       <button class="back-btn" @click="goBack" aria-label="返回">←</button>
@@ -154,6 +154,11 @@
           <div v-if="expandedId === m.id" class="detail" @click.stop>
             <p v-if="m.summary" class="summary">{{ m.summary }}</p>
             <button class="view-btn" @click="openDetail(m)">查看详情</button>
+          </div>
+          <!-- Q-34（2026-11-17）：文章/卡片的阅读入口原来藏在「点开卡片 → 查看详情」里，
+               用户根本发现不了，于是反馈「手机端看不了讲义/文章」。这里常显一个阅读按钮。 -->
+          <div class="m-actions">
+            <button class="view-btn" @click.stop="openDetail(m)">阅读全文</button>
           </div>
         </div>
       </template>
@@ -1122,4 +1127,6 @@ onMounted(fetchMaterials);
   .stack.is-entering .stack-card.lv0,
   .stack.is-entering-prev .stack-card.lv0 { animation: none; transform: none; opacity: 1; }
 }
-</style>
+.m-actions { padding: 0 12px 10px; }
+.m-actions .view-btn { width: 100%; }</style>
+
