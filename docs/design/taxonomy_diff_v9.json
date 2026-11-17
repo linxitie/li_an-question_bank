@@ -1,0 +1,199 @@
+{
+ "generated_at": "2026-11-17T20:39:32",
+ "subjects": {
+  "行测": {
+   "db_knowledge_points": 8,
+   "want_knowledge_points": 7,
+   "missing_knowledge_point": [],
+   "db_only_knowledge_point": [
+    "科学推理"
+   ],
+   "points": {
+    "政治理论": {
+     "sub_category_id": 1,
+     "db_points": 5,
+     "want_points": 5,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 51,
+     "detail_want": 21,
+     "question_count": 42
+    },
+    "常识判断": {
+     "sub_category_id": 2,
+     "db_points": 7,
+     "want_points": 7,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 71,
+     "detail_want": 30,
+     "question_count": 100
+    },
+    "言语理解与表达": {
+     "sub_category_id": 3,
+     "db_points": 3,
+     "want_points": 3,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 109,
+     "detail_want": 17,
+     "question_count": 77
+    },
+    "数量关系": {
+     "sub_category_id": 4,
+     "db_points": 2,
+     "want_points": 2,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 87,
+     "detail_want": 15,
+     "question_count": 39
+    },
+    "判断推理": {
+     "sub_category_id": 5,
+     "db_points": 4,
+     "want_points": 4,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 195,
+     "detail_want": 20,
+     "question_count": 24
+    },
+    "资料分析": {
+     "sub_category_id": 6,
+     "db_points": 3,
+     "want_points": 3,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 57,
+     "detail_want": 14,
+     "question_count": 57
+    },
+    "知觉速度与准确性": {
+     "sub_category_id": 7,
+     "db_points": 3,
+     "want_points": 3,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 18,
+     "detail_want": 12,
+     "question_count": 6
+    }
+   },
+   "questions": 622
+  },
+  "申论": {
+   "db_knowledge_points": 5,
+   "want_knowledge_points": 5,
+   "missing_knowledge_point": [],
+   "db_only_knowledge_point": [],
+   "points": {
+    "归纳概括": {
+     "sub_category_id": 8,
+     "db_points": 6,
+     "want_points": 6,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 36,
+     "detail_want": 24,
+     "question_count": 9
+    },
+    "综合分析": {
+     "sub_category_id": 9,
+     "db_points": 5,
+     "want_points": 5,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 29,
+     "detail_want": 21,
+     "question_count": 5
+    },
+    "提出对策": {
+     "sub_category_id": 10,
+     "db_points": 5,
+     "want_points": 5,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 26,
+     "detail_want": 21,
+     "question_count": 5
+    },
+    "应用文写作": {
+     "sub_category_id": 11,
+     "db_points": 4,
+     "want_points": 4,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 29,
+     "detail_want": 22,
+     "question_count": 4
+    },
+    "议论文写作": {
+     "sub_category_id": 12,
+     "db_points": 5,
+     "want_points": 5,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 31,
+     "detail_want": 20,
+     "question_count": 9
+    }
+   },
+   "questions": 56
+  },
+  "公专": {
+   "db_knowledge_points": 3,
+   "want_knowledge_points": 3,
+   "missing_knowledge_point": [],
+   "db_only_knowledge_point": [],
+   "points": {
+    "职业素养": {
+     "sub_category_id": 13,
+     "db_points": 5,
+     "want_points": 5,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 36,
+     "detail_want": 21,
+     "question_count": 97
+    },
+    "基础知识": {
+     "sub_category_id": 14,
+     "db_points": 11,
+     "want_points": 11,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 103,
+     "detail_want": 64,
+     "question_count": 1408
+    },
+    "基本警务能力": {
+     "sub_category_id": 15,
+     "db_points": 19,
+     "want_points": 19,
+     "missing_points": [],
+     "db_only_points": [],
+     "db_other_points": [],
+     "detail_db": 119,
+     "detail_want": 81,
+     "question_count": 844
+    }
+   },
+   "questions": 3085
+  }
+ }
+}

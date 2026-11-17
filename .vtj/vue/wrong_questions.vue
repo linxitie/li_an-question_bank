@@ -343,6 +343,30 @@
             <button class="detail-close-btn" @click="closeQuestionDetail">关闭</button>
           </div>
           <div class="wq-detail-body">
+            <!-- 复合题材料：吸顶展示。滚动长题干与选项时材料始终可见，避免"题目完整性被破坏" -->
+            <section
+              v-if="state.detailQuestion.group && state.detailQuestion.group.content"
+              class="detail-material"
+            >
+              <header class="detail-material__head" @click="toggleMaterial">
+                <span class="detail-material__title">📄 本组材料</span>
+                <span v-if="state.detailQuestion.group.title" class="detail-material__sub">{{ state.detailQuestion.group.title }}</span>
+                <span class="detail-material__toggle">{{ state.materialOpen ? '收起' : '展开' }}</span>
+              </header>
+              <div
+                v-show="state.materialOpen"
+                class="detail-material__body"
+                v-html="renderImageMarkers(state.detailQuestion.group.content, state.detailQuestion.image_map)"
+              ></div>
+            </section>
+            <p v-else-if="state.detailQuestion.groupId" class="wq-gap-note">
+              ⚠️ 本题属于复合题，但题组材料缺失，当前只显示小题题干。
+            </p>
+
+            <div v-if="state.detailQuestion.gapTags && state.detailQuestion.gapTags.length" class="wq-gap-tags">
+              <span v-for="tag in state.detailQuestion.gapTags" :key="tag" class="wq-gap-tag">{{ tag }}</span>
+            </div>
+
             <div class="detail-question-content">
               <p class="detail-stem" v-html="renderImageMarkers(state.detailQuestion.content, state.detailQuestion.image_map)"></p>
             </div>
@@ -352,7 +376,8 @@
                 :key="idx"
                 :class="['detail-option', {
                   correct: isCorrectOption(opt.key, state.detailQuestion.correctAnswer),
-                  wrong: isWrongOption(opt.key, state.detailQuestion.userAnswer, state.detailQuestion.correctAnswer)
+                  wrong: isWrongOption(opt.key, state.detailQuestion.userAnswer, state.detailQuestion.correctAnswer),
+                  'is-placeholder': isPlaceholderOption(opt.value || opt.text)
                 }]">
                 <span class="option-letter">{{ opt.key || String.fromCharCode(65 + idx) }}.</span>
                 <span class="option-text" v-html="renderImageMarkers(opt.value || opt.text, state.detailQuestion.image_map)"></span>
@@ -362,7 +387,10 @@
               <strong>您的答案：</strong><span class="user-answer-text">{{ state.detailQuestion.userAnswer }}</span>
             </div>
             <div class="detail-analysis-section">
-              <h4>答案解析</h4>
+              <h4>
+                答案解析
+                <span v-if="state.detailQuestion.analysisSource === 'missing'" class="wq-gap-tag inline">无官方解析</span>
+              </h4>
               <p v-html="renderImageMarkers(state.detailQuestion.analysis, state.detailQuestion.image_map)"></p>
             </div>
           </div>
@@ -501,6 +529,7 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
         // 题目详情弹窗
         showQuestionDetail: false,
         detailQuestion: null,
+        materialOpen: true,
         // 批改结果页
         showReviewResult: false,
         reviewResult: null,
@@ -1130,10 +1159,20 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
             return;
           }
           const data = await res.json();
+          const group = data.group || null;
+          const hasMaterial = !!(group && String(group.content || '').trim().length >= 10);
+          const gapTags = [];
+          if (data.group_id && !hasMaterial) gapTags.push('材料缺失');
+          // 「无官方解析」在答案解析标题旁已有内联标记，这里不再重复进标签行
+          if (!String(data.correct_answer || '').trim()) gapTags.push('正确答案缺失');
+          if ((data.options || []).some((o) => this.isPlaceholderOption(o.value || o.text))) gapTags.push('选项待补');
+          this.state.materialOpen = true;
           this.state.detailQuestion = {
             wrong_id: data.wrong_id,
             question_id: data.question_id,
-            content: data.content,
+            // 复合题的 detail.content 会把题组材料整段拼进正文；材料另由吸顶区展示，
+            // 这里只保留小题题干，否则材料会出现两遍。
+            content: hasMaterial && data.stem ? data.stem : data.content,
             options: data.options || [],
             correctAnswer: data.correct_answer || '',
             userAnswer: data.user_answer || '',
@@ -1142,7 +1181,11 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
             type: data.type || '单选题',
             globalAccuracy: data.global_accuracy || 0,
             is_cut: data.is_cut,
-            image_map: data.image_map || {}
+            image_map: data.image_map || {},
+            group: group,
+            groupId: data.group_id || 0,
+            analysisSource: data.analysis_source || 'official',
+            gapTags: gapTags
           };
           this.state.showQuestionDetail = true;
         } catch(e) {
@@ -1153,6 +1196,19 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
       closeQuestionDetail() {
         this.state.showQuestionDetail = false;
         this.state.detailQuestion = null;
+      },
+
+      toggleMaterial() {
+        this.state.materialOpen = !this.state.materialOpen;
+      },
+
+      /**
+       * 选项是否为原始缺失占位（题库里有「（待补充）」「图中的B选项」这类脏数据）。
+       * 命中时高亮提示，避免用户以为自己看到了完整选项。
+       */
+      isPlaceholderOption(text) {
+        const s = String(text || '');
+        return /^\s*[（(]?\s*(待补充|略|暂无)\s*[）)]?\s*$/.test(s) || /图中的\s*[A-D]\s*选项/.test(s);
       },
 
       // ========== 图片占位符替换 ==========
@@ -2796,6 +2852,89 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
     margin: 0;
   }
 
+  /* ===== 复合题材料吸顶（v9 M3）===== */
+  .detail-material {
+    position: sticky;
+    top: -28px;
+    z-index: 3;
+    margin: -28px -32px 18px;
+    padding: 0 32px;
+    background: #fff;
+    border-bottom: 1px solid #e6ecf5;
+  }
+  .detail-material__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    cursor: pointer;
+  }
+  .detail-material__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a2b5f;
+  }
+  .detail-material__sub {
+    flex: 1;
+    min-width: 0;
+    font-size: 12.5px;
+    color: #7a8699;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .detail-material__toggle {
+    margin-left: auto;
+    font-size: 12.5px;
+    color: #1d4ed8;
+  }
+  .detail-material__body {
+    max-height: 42vh;
+    overflow-y: auto;
+    padding: 0 14px 12px;
+    margin-bottom: 12px;
+    border-left: 3px solid #dbe6f7;
+    font-size: 14px;
+    line-height: 1.9;
+    color: #33415a;
+    white-space: pre-wrap;
+  }
+  .detail-material__body img {
+    max-width: 100%;
+    height: auto;
+  }
+  .wq-gap-note {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border: 1px dashed #f0c36d;
+    border-radius: 8px;
+    background: #fffaf0;
+    color: #b45309;
+    font-size: 13px;
+  }
+  .wq-gap-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .wq-gap-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #fff1f0;
+    color: #b42318;
+    font-size: 12px;
+  }
+  .wq-gap-tag.inline {
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+  .detail-option.is-placeholder .option-text {
+    color: #b45309;
+    font-style: italic;
+  }
+
   /* ===== 批改结果页 ===== */
   .review-result-page {
     position: fixed;
@@ -2971,6 +3110,14 @@ import { emitWrongQuestionsChanged, onWrongQuestionsChanged } from '@/modules/wr
     }
     /* 详情弹窗手机端全屏：1400×800 的固定尺寸会让头部「单选题/难度/正确率/关闭」
        挤成竖排（2026-11-14 实拍） */
+    .detail-material {
+      top: -14px;
+      margin: -14px -14px 14px;
+      padding: 0 14px;
+    }
+    .detail-material__body {
+      max-height: 38vh;
+    }
     .wq-detail-modal {
       width: 100vw;
       max-width: 100vw;

@@ -56,7 +56,8 @@ const VTJ_LOCKED_VERSIONS = {
 //   使远端为 133；再叠加本线 /mobile/paper-result 1 条 = 134。
 //   注：`/admin/papers` 页面路由在本线已按「试卷收敛 P4=A」改成 redirect（无 component），
 //   远端仍保留页面版，合并取本线的 redirect，所以不是 135。与 test_route_roles 的 134 同步）
-const EXPECTED_DYNAMIC_IMPORTS = 134;
+// v9：+2（/teacher/content-repair 内容修复中心、/inbox 收件箱），与 test_route_roles 的 136 同步
+const EXPECTED_DYNAMIC_IMPORTS = 136;
 
 const violations = [];
 

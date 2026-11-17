@@ -297,7 +297,7 @@
 <script lang="ts">
 // @ts-nocheck
 import { defineComponent, ref, onMounted, onBeforeUnmount, computed, nextTick, watch, createApp } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { useProvider } from '@vtj/renderer';
 import TeacherNavHeader from './TeacherNavHeader.vue';
@@ -313,6 +313,7 @@ export default defineComponent({
   setup() {
     const provider = useProvider({ id: 'teacher_questions', version: '2' });
     const router = useRouter();
+    const route = useRoute();
 
     const keyword = ref('');
     const filterSubject = ref('');

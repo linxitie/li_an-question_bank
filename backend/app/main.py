@@ -21,6 +21,7 @@ from .api.v1 import knowledge
 from .api.v1 import post
 from .api.v1.catalog import questions, papers, question_actions, wrong_questions
 from .api.v1.catalog import import_report
+from .api.v1.catalog import content_gaps
 from .api.v1.exam import exams, stats, practice, exam_records, quick_practice, smart_exam, review as review_api
 from .api.v1.exam import point_review
 from .api.v1.library import videos, media, image_media
@@ -1172,6 +1173,7 @@ app.include_router(practice.router)
 app.include_router(quick_practice.router)
 app.include_router(point_review.router)
 app.include_router(import_report.router)
+app.include_router(content_gaps.router)  # 内容缺口体检（v9 M7，新增端点）
 app.include_router(review_api.router)
 app.include_router(smart_exam.router)
 app.include_router(question_actions.router)

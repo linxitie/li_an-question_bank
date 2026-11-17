@@ -550,7 +550,24 @@ def remind(db: Session, user_id: int) -> Dict[str, Any]:
         related_type="review",
     ))
     db.commit()
-    return {"sent": True, "count": count, "overdue_level": level}
+
+    # 站内信之外再走短信（默认关闭；开启后受每日配额约束）。旁路失败不影响站内信。
+    sms_result: Dict[str, Any] = {"sent": False, "reason": "skipped"}
+    try:
+        from .notify import sms_adapter
+        from ..models.models import SysUser
+
+        user = db.query(SysUser).filter(SysUser.user_id == user_id).first()
+        sms_result = sms_adapter.send(
+            getattr(user, "phone", None) if user else None,
+            title,
+            "打开砺安题库 → 错题集 → 错题复习，按顺序过一遍即可。",
+            user_id=user_id,
+        )
+    except Exception as e:  # noqa: BLE001 - 短信是旁路，不影响站内信
+        logger.warning("复习短信提醒失败 user=%s: %s", user_id, e)
+
+    return {"sent": True, "count": count, "overdue_level": level, "sms": sms_result}
 
 
 def remind_all(db: Session) -> Dict[str, Any]:

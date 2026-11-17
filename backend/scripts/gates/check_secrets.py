@@ -55,6 +55,11 @@ ALLOW_PREFIX = (
 )
 
 
+# pydantic 的空默认值写法（Field("", env="...")）不是硬编码密钥，但赋值正则会把 "Field("
+# 当成值捕获（引号内为空时捕获回溯到函数名），v9 新增短信配置时实测误报，故先归一化再匹配。
+_EMPTY_DEFAULT = re.compile(r'=\s*Field\(\s*["\']\s*["\']')
+
+
 def is_allowed(value: str) -> bool:
     v = value.strip().strip('"\'')
     if v.lower() in ALLOW_EXACT:
@@ -144,6 +149,9 @@ def scan_file(path: str) -> list[tuple[str, int, str]]:
             m = pattern.search(line)
             if m:
                 hits.append((rel, lineno, rule_name, mask(m.group(0))))
+        if _EMPTY_DEFAULT.search(line):
+            # 空默认值 = 未配置，不可能是泄露的密钥本体
+            continue
         for rule_name, pattern in ASSIGN_RULES:
             m = pattern.match(line)
             if m and not is_allowed(m.group(1)):

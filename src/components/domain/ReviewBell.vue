@@ -25,6 +25,7 @@
         <div>
           <h3 class="review-panel__title">遗忘曲线复习</h3>
           <p class="review-panel__sub">{{ headNote }}</p>
+          <p v-if="unread" class="review-panel__mail">收件箱还有 {{ unread }} 条未读</p>
         </div>
         <button class="review-panel__close" type="button" aria-label="收起" @click="closePanel">×</button>
       </header>
@@ -51,6 +52,7 @@
         <button class="review-primary" type="button" :disabled="!dueTotal" @click="startReview">
           开始复习{{ dueTotal ? '（' + dueTotal + ' 题）' : '' }}
         </button>
+        <button class="review-ghost" type="button" @click="openInbox">收件箱{{ unread ? '（' + unread + '）' : '' }}</button>
         <button class="review-ghost" type="button" @click="closePanel">稍后</button>
       </footer>
     </section>
@@ -78,8 +80,12 @@ const loading = ref(false);
 const error = ref('');
 const items = ref<ReviewItem[]>([]);
 const dueTotal = ref(0);
+const unread = ref(0);
 const note = ref('');
 const phase = ref('');
+
+// 角标优先显示未读消息数：用户要的是「有没有新提醒」，到期题量在面板里更精确
+const badgeCount = computed(() => (unread.value > 0 ? unread.value : dueTotal.value));
 
 const subjectNames: Record<number, string> = { 1: '行测', 2: '申论', 3: '公专' };
 const subjectLabel = (id: number | null) => (id ? subjectNames[id] || '综合' : '综合');
@@ -106,6 +112,17 @@ const authFetch = (url: string, opts?: RequestInit) => {
   return auth?.apiFetch ? auth.apiFetch(url, opts) : fetch(url, opts);
 };
 
+const loadUnread = async () => {
+  try {
+    const res = await authFetch('/api/notifications?unread_only=true&page=1&page_size=1');
+    if (!res || !res.ok) return;
+    const data = await res.json();
+    unread.value = Number(data.unread || 0);
+  } catch {
+    // 收件箱接口抖动不该影响复习面板
+  }
+};
+
 const load = async () => {
   loading.value = true;
   error.value = '';
@@ -117,6 +134,8 @@ const load = async () => {
     dueTotal.value = Number(data.due_now ?? data.total ?? items.value.length) || 0;
     note.value = data.note || '';
     phase.value = data.phase || '';
+    await loadUnread();
+    maybePushChannels();
   } catch (e) {
     error.value = '复习队列读取失败，稍后再试';
   } finally {
@@ -124,8 +143,86 @@ const load = async () => {
   }
 };
 
+/* ---------------- 多通道提醒（v9 M4） ----------------
+ * 站内信是底座；这里补三件事，且都必须「用户不被打扰」：
+ *  1) 桌面通知：只在页面不可见时弹，且同一天同类只弹一次；
+ *  2) 振动 + 响铃：仅移动端振动；响铃用 WebAudio 合成一段短提示音，不依赖音频文件；
+ *  3) 浏览器未授权时静默降级为角标，不反复弹权限框（要用户手势才能申请，放在点击时）。
+ */
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+};
+const pushedKey = 'la-review-pushed-' + todayKey();
+
+const chime = () => {
+  try {
+    const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+    setTimeout(() => ctx.close().catch(() => undefined), 800);
+  } catch {
+    // 浏览器拦截自动播放时不发声，属于预期降级
+  }
+};
+
+const vibrate = () => {
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      navigator.vibrate([120, 80, 120]);
+    }
+  } catch {
+    // 不支持振动（桌面/未授权）时忽略
+  }
+};
+
+const maybePushChannels = async () => {
+  if (dueTotal.value <= 0 && unread.value <= 0) return;
+  if (document.visibilityState === 'visible') return;
+  try {
+    if (sessionStorage.getItem(pushedKey)) return;
+    sessionStorage.setItem(pushedKey, '1');
+  } catch {
+    return;
+  }
+  const text = dueTotal.value > 0
+    ? `今天有 ${dueTotal.value} 道错题该复习了`
+    : `收件箱有 ${unread.value} 条未读消息`;
+  vibrate();
+  chime();
+  try {
+    const N = (window as any).Notification;
+    if (N && N.permission === 'granted') {
+      new N('砺安题库 · 遗忘曲线复习', { body: text, tag: 'la-review' });
+    }
+  } catch {
+    // 桌面通知不可用时已由角标兜底
+  }
+};
+
+/** 点击铃铛时申请一次桌面通知权限（必须发生在用户手势中） */
+const requestDesktopPermission = () => {
+  try {
+    const N = (window as any).Notification;
+    if (N && N.permission === 'default') void N.requestPermission();
+  } catch {
+    // 忽略：拒绝后仍可用角标与面板
+  }
+};
+
 const openPanel = () => {
   open.value = true;
+  requestDesktopPermission();
   void load();
 };
 const closePanel = () => {
@@ -141,16 +238,28 @@ const startReview = () => {
   void router.push('/exercise?review=1&subject=' + key + '&count=20');
 };
 
+const openInbox = () => {
+  open.value = false;
+  void router.push('/inbox');
+};
+
 // 面板挂着时 5 分钟刷新一次，避免长时间停留后数字过期（切回标签页也会刷）
 const timer = window.setInterval(() => {
   if (document.visibilityState === 'visible') void load();
 }, 5 * 60 * 1000);
 
+// 切回标签页立即刷新一次，用户不会看到过期计数
+const onVisible = () => {
+  if (document.visibilityState === 'visible') void load();
+};
+
 onMounted(() => {
   void load();
+  document.addEventListener('visibilitychange', onVisible);
 });
 onBeforeUnmount(() => {
   window.clearInterval(timer);
+  document.removeEventListener('visibilitychange', onVisible);
 });
 </script>
 
@@ -235,6 +344,11 @@ onBeforeUnmount(() => {
   font-size: 12px;
   line-height: 1.6;
   color: #6b7280;
+}
+.review-panel__mail {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #1d4ed8;
 }
 .review-panel__close {
   border: none;

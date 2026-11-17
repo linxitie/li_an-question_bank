@@ -58,6 +58,7 @@ def main():
         pass
 
     quick = '--quick' in sys.argv
+    deploy = '--deploy' in sys.argv
     ci = '--ci' in sys.argv
     layer_filter = None
     if '--layer' in sys.argv:
@@ -88,6 +89,22 @@ def main():
         print(f'  {status}  {name}  ({elapsed:.1f}s)')
         if r.returncode != 0 and r.stdout:
             for line in r.stdout.strip().split('\n')[-3:]:
+                print(f'       {line}')
+
+    # --deploy：部署一致性（v9 M5）。不进默认门禁——开发态后端常常故意跑旧进程做对比，
+    # 只有发版/合并前才要求「HEAD = 后端 revision = 前端构建戳」。
+    if deploy:
+        t0 = time.time()
+        r = subprocess.run(
+            [sys.executable, os.path.join(WORKSPACE_ROOT, 'scripts', 'ops', 'verify_deploy.py')],
+            capture_output=True, text=True, encoding='utf-8', errors='replace',
+            cwd=WORKSPACE_ROOT, env=child_env,
+        )
+        status = 'PASS' if r.returncode == 0 else 'FAIL'
+        results.append({'layer': 'DEPLOY', 'status': status, 'elapsed_s': round(time.time() - t0, 1)})
+        print(f'  {status}  DEPLOY  ({time.time() - t0:.1f}s)')
+        if r.returncode != 0:
+            for line in (r.stdout or '').strip().split('\n')[-4:]:
                 print(f'       {line}')
 
     # 写 last_run.json：必须锚定 BACKEND_ROOT。原先用相对路径 'data/gates'，

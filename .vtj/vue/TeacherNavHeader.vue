@@ -181,6 +181,8 @@ export default defineComponent({
       { key: 'questions', label: '题目管理', path: '/teacher/questions' },
       // v8 新增：低置信考点分配的人工复核入口（手写页 /teacher/point-review）
       { key: 'review', label: '考点复核', path: '/teacher/point-review' },
+      // v9 新增：导入后内容缺口（缺图/横线/选项/答案/解析/材料）的集中修复入口
+      { key: 'content-repair', label: '内容修复', path: '/teacher/content-repair' },
       { key: 'papers', label: '试卷管理', path: '/teacher/papers' },
       { key: 'scores', label: '成绩管理', path: '/teacher/scores' },
       { key: 'classes', label: '班级管理', path: '/teacher/classes' },
