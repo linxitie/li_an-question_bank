@@ -2936,6 +2936,23 @@ async def admin_update_meta(material_id: int, body: dict,
         if category != m.category:
             m.category = category[:100] if category else None
             changed.append("category")
+    # S4（2026-11-17）：科目此前不可改（前端也从不传），于是申论内容被落成公专后无法纠正。
+    # Q-70(a)：改资料科目时同步一次在线卷，避免「资料显示申论、可作答卷还是公专」。
+    # TEMP-DIAG（Q-72）：定位「传了 subject 但 changed=[]」
+    if "subject" in body:
+        want = (body.get("subject") or "").strip().lower()
+        if want not in SUBJECTS:
+            raise HTTPException(400, "科目只能是 xingce / shenlun / gongzhuan")
+        if want != (m.subject or ""):
+            m.subject = want
+            changed.append("subject")
+            try:
+                from ....services import material_paper_sync
+                sync = material_paper_sync.sync_material(db, m)
+                if sync.get("note"):
+                    changed.append(sync["note"])
+            except Exception as exc:  # noqa: BLE001 — 同步失败不该阻断改科目本身
+                changed.append("exam_paper_sync_failed:%s" % type(exc).__name__)
     # L1（2026-11-08）：投放位可改（D-L8）。改完立刻同步一次卷状态 —— 例如
     # both→library 要马上把已发布的卷落回 DRAFT，不能等到下次上架。
     if "placement" in body:
