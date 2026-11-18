@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <Teleport to="body">
     <div v-if="open" class="mmd-root" role="dialog" aria-modal="true" aria-label="改信息">
       <div class="mmd-mask" @click="close" />
@@ -27,6 +27,16 @@
               <label class="mmd-field">
                 <span>分类（可空）</span>
                 <input v-model="form.category" class="adm-input" maxlength="100" :disabled="saving" />
+              </label>
+              <!-- S4（2026-11-17）：科目原来只是只读入参，导入后无法纠正（用户实测：
+                   申论卡片被落成公专且改不了）。这里改成可编辑下拉。 -->
+              <label class="mmd-field">
+                <span>科目</span>
+                <select v-model="form.subject" class="adm-select" :disabled="saving">
+                  <option value="xingce">行测</option>
+                  <option value="shenlun">申论</option>
+                  <option value="gongzhuan">公专</option>
+                </select>
               </label>
               <label class="mmd-field">
                 <span>编号</span>
@@ -205,6 +215,8 @@ const files = ref<MaterialFileItem[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 
 const form = reactive({
+  /** S4：科目改为可编辑（原来只有只读 props.subject） */
+  subject: 'gongzhuan' as 'xingce' | 'shenlun' | 'gongzhuan',
   title: '',
   category: '',
   paperCode: '',
@@ -289,6 +301,8 @@ async function save(): Promise<void> {
     const res = await updateMaterialMeta(props.materialId, {
       title: form.title.trim(),
       category: form.category.trim() || null,
+      // S4：把科目一起提交（后端 PUT 已支持 subject，此前前端从不传，所以改不了）
+      subject: form.subject,
       paper_code: form.paperCode.trim(),
       ...(isPaper.value
         ? {
@@ -354,7 +368,7 @@ async function onAttach(e: Event): Promise<void> {
   try {
     const res = await uploadMaterialFile({
       file,
-      subject: props.subject,
+      subject: (props.subject || 'gongzhuan') as 'xingce' | 'shenlun' | 'gongzhuan',
       type: (preview.value?.type === 'paper' ? 'paper' : 'lecture'),
       materialId: props.materialId,
       onProgress: (p) => { uploadPercent.value = p; }
@@ -478,3 +492,5 @@ defineExpose({ load, save });
 }
 .mmd-foot__hint { flex: 1; font-size: 12px; color: var(--adm-text-weak); }
 </style>
+
+

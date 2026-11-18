@@ -73,7 +73,11 @@ export const useWrongbookStore = defineStore('wrongbook', () => {
     return {
       page,
       pageSize: pageSize.value,
-      subjectId: filters.value.subjectId ?? undefined
+      subjectId: filters.value.subjectId ?? undefined,
+      keyword: filters.value.keyword?.trim() || undefined,
+      year: filters.value.year ?? undefined,
+      source: filters.value.source?.trim() || undefined,
+      subCategory: filters.value.subCategory?.trim() || undefined
     };
   }
 
@@ -96,9 +100,16 @@ export const useWrongbookStore = defineStore('wrongbook', () => {
     loading.value = true;
     error.value = null;
     if (query.pageSize) pageSize.value = query.pageSize;
-    if (query.subjectId !== undefined) {
-      filters.value = { ...filters.value, subjectId: query.subjectId };
-    }
+    // M5：筛选条件随 load 一起下发（keyword/year/source），由服务端执行模糊匹配，
+    // 否则本地只能搜到已加载的第一页，用户会误以为「搜索结果变少」。
+    filters.value = {
+      subjectId: query.subjectId ?? filters.value.subjectId ?? undefined,
+      masteryLevel: filters.value.masteryLevel,
+      keyword: query.keyword?.trim() || undefined,
+      year: query.year ?? undefined,
+      source: query.source?.trim() || undefined,
+      subCategory: query.subCategory?.trim() || undefined
+    };
     try {
       const result = await fetchWrongbookList(buildQuery(1));
       items.value = result.items;

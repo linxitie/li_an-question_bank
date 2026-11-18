@@ -94,34 +94,72 @@ def get_field_value(row_dict: dict, field: str) -> str:
     return ''
 
 
+# 带样式加载的体积上限：样式表解析比 values_only 慢一个量级，
+# 超过 8MB 的工作簿只读取值（不还原横线），避免一个大文件拖垮导入队列。
+_STYLE_LOAD_MAX_BYTES = 8 * 1024 * 1024
+
+
 def parse_excel_buffer(buf: bytes, filename: str) -> list:
-    """使用 openpyxl 解析 Excel 文件，支持表头探测和多 sheet"""
+    """使用 openpyxl 解析 Excel 文件，支持表头探测、多 sheet 与填空横线还原。
+
+    ★ 横线还原（v8 M3-补）：`values_only=True` 会丢掉单元格样式，而 Excel 题库的
+      填空横线恰恰是「空单元格 + 只有下边框」或「富文本里带下划线的空 run」，
+      两者都会被读成空串，题干于是少一个空。因此小文件额外加载一份带样式的
+      工作簿（read_only=False）只用来判断这两件事，取值仍走 values_only。
+    """
     try:
         import openpyxl
     except ImportError:
         raise RuntimeError("服务器缺少 openpyxl 库")
 
+    from .xlsx_underline import cell_display_text
+
     wb = openpyxl.load_workbook(io.BytesIO(buf), read_only=True, data_only=True)
+    wb_styled = None
+    if len(buf) <= _STYLE_LOAD_MAX_BYTES:
+        try:
+            wb_styled = openpyxl.load_workbook(io.BytesIO(buf), data_only=True)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[xlsx-underline] 带样式加载失败，跳过横线还原：{e}")
+            wb_styled = None
     all_questions = []
 
     for ws in wb.worksheets:
         rows = list(ws.iter_rows(values_only=True))
         if len(rows) < 2:
             continue
+        ws_styled = None
+        if wb_styled is not None:
+            try:
+                ws_styled = wb_styled[ws.title]
+            except Exception:
+                ws_styled = None
 
         # ★ J-3-3: 表头探测
         header_idx = detect_header_row(rows)
         headers = [str(h).strip() if h else '' for h in rows[header_idx]]
 
-        for row in rows[header_idx + 1:]:
+        for r_off, row in enumerate(rows[header_idx + 1:]):
             if all(v is None or str(v).strip() == '' for v in row):
                 continue
+            row_excel = header_idx + 2 + r_off      # Excel 行号从 1 开始
             row_dict = {}
             for i, h in enumerate(headers):
                 val = row[i] if i < len(row) else None
-                row_dict[h] = str(val).strip() if val is not None else ''
+                text = str(val).strip() if val is not None else ''
+                if not text and ws_styled is not None:
+                    try:
+                        text = cell_display_text(ws_styled.cell(row=row_excel, column=i + 1))
+                    except Exception:
+                        text = ''
+                row_dict[h] = text
             all_questions.append(row_dict)
 
+    if wb_styled is not None:
+        try:
+            wb_styled.close()
+        except Exception:
+            pass
     return all_questions
 
 

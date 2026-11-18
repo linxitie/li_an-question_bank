@@ -24,9 +24,12 @@ var ALLOWED_TAGS = [
 
 // 缺图占位：内联 SVG，避免占位图文件本身缺失导致二次裂图
 var PLACEHOLDER_SRC = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120">' +
-  '<rect width="100%" height="100%" fill="#f5f6f8" stroke="#dcdfe6"/>' +
-  '<text x="50%" y="50%" fill="#909399" font-size="14" text-anchor="middle" dominant-baseline="middle">图片加载失败</text>' +
+  '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="180">' +
+  '<rect x="0.5" y="0.5" width="479" height="179" rx="8" fill="#f7f9fc" stroke="#c7cdd8" stroke-dasharray="8 6"/>' +
+  '<rect x="224" y="47" width="32" height="26" rx="3" fill="none" stroke="#a8b0be" stroke-width="2"/>' +
+  '<path d="M230 66 L238 57 L244 63 L249 59" fill="none" stroke="#a8b0be" stroke-width="2"/>' +
+  '<text x="50%" y="104" fill="#7a8498" font-size="18" text-anchor="middle">配图缺失</text>' +
+  '<text x="50%" y="130" fill="#a8b0be" font-size="13" text-anchor="middle">原图未随题库一并入库</text>' +
   '</svg>'
 );
 

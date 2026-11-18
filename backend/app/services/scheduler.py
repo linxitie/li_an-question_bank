@@ -707,6 +707,39 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # M3：艾宾浩斯复习提醒（08:30 主提醒；17:30 只对"逾期≥3 天"的用户二次提醒）
+    def _remind_review_due(bump_overdue: bool = False):
+        from ..core.database import SessionLocal
+        from .review_scheduler import remind_all
+
+        db = SessionLocal()
+        try:
+            result = remind_all(db)
+            if bump_overdue:
+                logger.info("复习提醒（逾期升级）: %s", result)
+            else:
+                logger.info("复习提醒: %s", result)
+        except Exception as e:  # noqa: BLE001
+            db.rollback()
+            logger.warning("复习提醒任务失败: %s", e)
+        finally:
+            db.close()
+
+    scheduler.add_job(
+        _remind_review_due,
+        trigger=CronTrigger(hour=8, minute=30, timezone=CST),
+        id="review_remind_morning",
+        name="复习提醒（每日 08:30）",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        lambda: _remind_review_due(bump_overdue=True),
+        trigger=CronTrigger(hour=17, minute=30, timezone=CST),
+        id="review_remind_evening",
+        name="复习强提醒-逾期升级（每日 17:30）",
+        replace_existing=True,
+    )
+
     scheduler.start()
     logger.info("定时任务调度器已启动（每日 24:00 CST）")
 

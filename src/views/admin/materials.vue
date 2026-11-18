@@ -303,6 +303,13 @@
                     : '解析原件里的题目（docx/pdf），先出待确认清单再入库'"
                   @click="openDraft(row)"
                 >{{ row.parse_draft?.status === 'pending' ? '待确认' : '导题' }}</a>
+                <!-- Q-27（2026-11-17）：把「两次确认」说清楚 —— 待确认 = 点进去还要再确认一次，
+                     否则草稿会一直停在 pending，看起来像「上传后识别不出题」。 -->
+                <span
+                  v-if="row.type === 'paper' && row.file_count && row.parse_draft?.status === 'pending'"
+                  class="mm-hint"
+                  title="草稿已拆出题目但还没入库：点左侧「待确认」进去，再点一次「确认入库」才会写进题库"
+                >需点进去再确认一次</span>
                 <!-- P4（2026-11-09）：补答案（需要已有可作答卷，且卷里有题） -->
                 <a
                   v-if="row.type === 'paper' && row.exam?.known && row.exam.question_count"
@@ -1581,4 +1588,14 @@ onMounted(reload);
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 18px 16px;
+}.mm-hint {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  padding: 0 6px;
+  white-space: nowrap;
 }</style>
+

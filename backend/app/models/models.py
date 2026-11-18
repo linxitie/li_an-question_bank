@@ -542,6 +542,13 @@ class PracticeRecord(Base):
     practice_date = Column(Date, comment="刷题日期（用于按日统计）")
     time_spent = Column(Integer, comment="耗时（秒）")
     source_type = Column(String(50), comment="刷题来源（随机练习/章节练习/错题复习/快速练习/历年试卷/智能组卷）")
+    # 练习范围（考点 / 子科目 / 「其他（未细分）」收容）。
+    # 这四列在库里早已存在，但 ORM 一直没有声明——这正是历史 practice_record
+    # 的 scope_name 恒为 NULL、"练习记录"只能显示「其他」的根因。
+    scope_type = Column(String(20), comment="范围类型：point/subcategory/fallback/subject")
+    scope_id = Column(Integer, comment="范围ID（考点ID或子科目ID）")
+    scope_name = Column(String(100), comment="范围名称（冗余存储，便于历史记录展示）")
+    sub_category_id = Column(Integer, comment="子科目ID")
 
     user = relationship("SysUser")
     question = relationship("QuestionBank")
@@ -3441,3 +3448,56 @@ class StudyPlanSnapshot(Base):
     __table_args__ = (
         Index("idx_snapshot_user_plan", user_id, plan_id, version),
     )
+
+
+class ReviewSchedule(Base):
+    """艾宾浩斯复习排程（M3）：一题一行，按记忆稳定度推算下次到期。
+
+    为什么单独建表而不复用 wrong_question_personal：
+    错题集回答"哪些题错了"，复习排程回答"什么时候该再看一遍"，
+    两者的生命周期不同（错题可被移除，排程要保留记忆成长轨迹）。
+    """
+
+    __tablename__ = "review_schedule"
+
+    schedule_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False)
+    question_id = Column(BigInteger, nullable=False)
+    subject_id = Column(Integer)
+    point_id = Column(Integer)
+    stability = Column(Float, nullable=False, default=2.2, comment="记忆稳定度 S（天）")
+    difficulty = Column(Float, nullable=False, default=0.5, comment="难度 D ∈ [0,1]")
+    reps = Column(Integer, nullable=False, default=0, comment="成功复习次数")
+    lapses = Column(Integer, nullable=False, default=0, comment="答错次数")
+    last_review_at = Column(DateTime)
+    next_due_at = Column(DateTime, nullable=False)
+    last_result = Column(Integer, comment="1 对 / 0 错")
+    rescue_mode = Column(Integer, nullable=False, default=0, comment="连续 3 天未复习的补救态")
+    create_time = Column(DateTime, nullable=False, default=datetime.now)
+    update_time = Column(DateTime, nullable=False, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "question_id", name="uq_review_user_question"),
+        Index("ix_review_due", "user_id", "next_due_at"),
+    )
+
+
+class ReviewLog(Base):
+    """复习流水（M3）：一次作答一行，用于参数校准与效果评估。"""
+
+    __tablename__ = "review_log"
+
+    log_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, nullable=False)
+    question_id = Column(BigInteger, nullable=False)
+    result = Column(Integer, nullable=False, comment="1 对 / 0 错")
+    elapsed_ms = Column(Integer)
+    stability_before = Column(Float)
+    stability_after = Column(Float)
+    interval_days = Column(Integer)
+    reviewed_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    __table_args__ = (
+        Index("ix_review_log_user", "user_id", "reviewed_at"),
+    )
+

@@ -16,11 +16,13 @@
         <button class="kg-btn" :class="{ on: view === '3d' }" @click="view = view === '3d' ? '2d' : '3d'">
           {{ view === '3d' ? '2D 视图' : '3D 星图' }}
         </button>
+        <button class="kg-btn" :class="{ on: mode === 'heat' }" @click="mode = 'heat'">错题热力</button>
         <button class="kg-btn" @click="panelRef?.loadAll()">刷新</button>
       </div>
     </header>
 
-    <div v-if="view === '3d'" class="kg-stage">
+    <WrongHeatPanel v-if="mode === 'heat'" />
+    <div v-else-if="view === '3d'" class="kg-stage">
       <ForceGraph3D @select="onNodeSelect" />
       <aside v-if="selected" class="kg-panel">
         <header class="kg-panel__head">
@@ -29,7 +31,7 @@
         </header>
         <p class="kg-panel__meta">关联考点 {{ selected.degree }} 个</p>
         <div class="kg-panel__chips">
-          <button v-for="n in selected.neighbors" :key="(n.rel || 'rel') + '-' + n.id"
+          <button v-for="n in selected.neighbors" :key="(n.rel ?? '') + n.id"
                   class="kg-chip" :class="'rel-' + n.rel"
                   :title="relLabel(n.rel)"
                   @click="selected = { id: n.id, name: n.name, degree: 0, neighbors: [] }">
@@ -38,20 +40,28 @@
         </div>
       </aside>
     </div>
-    <KnowledgeGraphPanel v-else ref="panelRef" :mode="mode" />
+    <KnowledgeGraphPanel v-else ref="panelRef" :mode="mode === 'global' ? 'global' : 'mine'" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import KnowledgeGraphPanel from '@/components/kg/KnowledgeGraphPanel.vue';
 import ForceGraph3D from '@/components/kg/ForceGraph3D.vue';
+import WrongHeatPanel from '@/components/kg/WrongHeatPanel.vue';
 
 const panelRef = ref<InstanceType<typeof KnowledgeGraphPanel> | null>(null);
 const generating = ref(false);
-const mode = ref<'mine' | 'global'>('mine');
+const mode = ref<'mine' | 'global' | 'heat'>('mine');
 const view = ref<'2d' | '3d'>('3d');
+
+// 错题集「错题热力」跳转带 ?view=heat，直接落热力视图
+const route = useRoute();
+onMounted(() => {
+  if (route.query.view === 'heat') mode.value = 'heat';
+});
 
 interface KgNodePick {
   id: number | string;

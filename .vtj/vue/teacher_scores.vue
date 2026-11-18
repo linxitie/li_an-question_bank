@@ -118,6 +118,7 @@ import { useRouter } from 'vue-router';
 import { useProvider } from '@vtj/renderer';
 import { XChart } from '@vtj/charts';
 import TeacherNavHeader from './TeacherNavHeader.vue';
+import { renderQuestionSummary } from '@/utils/questionRender';
 
 export default defineComponent({
   name: 'TeacherScores',
@@ -209,7 +210,12 @@ export default defineComponent({
     });
 
     function formatTime(t: string) { if (!t) return '-'; return t.substring(0, 16).replace('T', ' '); }
-    function truncate(text: string, len: number) { return text && text.length > len ? text.substring(0, len) + '...' : text || ''; }
+    // 题干常含 <img src="/static/...">，原样截断会把图片路径当文本显示 → 先走摘要渲染再截断
+    function truncate(text: string, len: number) {
+      if (!text) return '';
+      const clean = renderQuestionSummary(String(text));
+      return clean.length > len ? clean.substring(0, len) + '...' : clean;
+    }
 
     function handleLogout() {
       const auth = (window as any).__VTJ_AUTH__;

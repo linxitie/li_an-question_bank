@@ -49,7 +49,13 @@ def test_page_route_count():
     #            使远端为 133，叠加本线 /mobile/paper-result 1 条 = 134。
     #            注：`/admin/papers` 页面路由在本线已按「试卷收敛 P4=A」改为 redirect（无 component），
     #            远端仍是页面版，合并取本线 redirect，故不是 135。两处门禁已同步为 134。
-    assert len(_pages()) == 134
+    # 142 -> 146: 2026-11-17 合并两条工作线（实测 parse_route_records 计数）：
+    #   远端三端登录 P2/P3/P4 带来 8 条教师设备端只读页（/tablet|/mobile 的 teacher
+    #   home / questions / papers / scores，组件双端复用，守 R12）→ 134 + 8 = 142；
+    #   本线 v9 再补 4 条真实页面（/practice-center、/teacher/point-review、
+    #   /teacher/content-repair、/inbox）→ 146。
+    #   与 scripts/verify-modularization-constraints.mjs 的 146 同步，改一处必须改两处。
+    assert len(_pages()) == 146
 
 
 def test_whitelist_has_no_roles():
@@ -67,12 +73,28 @@ def test_every_non_whitelist_page_declares_roles():
     assert missing == []
 
 
-def test_mobile_and_tablet_are_student_only():
+def test_device_routes_allow_student_and_teacher_only():
+    """设备端（/tablet、/mobile）只能出现 student / teacher；管理员必须电脑端。
+
+    旧规则是「设备端必须恰好 ['student']」——2026-11-16 三端登录方案（D-8/D-16）起
+    教师也可在设备端登录，故放宽为"角色集合 ⊆ {student, teacher}"；
+    同时明确禁止 admin 出现在设备端路由（与后端 device_policy 的硬约束一致）。
+    """
+    allowed = set(l7.DEVICE_ALLOWED_ROLES)
     bad = [
         r['path'] for r in _pages()
-        if r['path'].startswith(l7.MOBILE_PREFIXES) and r['roles'] != ['student']
+        if r['path'].startswith(l7.MOBILE_PREFIXES)
+        and (not r['roles'] or set(r['roles']) - allowed)
     ]
     assert bad == []
+
+
+def test_device_routes_never_contain_admin():
+    offenders = [
+        r['path'] for r in _pages()
+        if r['path'].startswith(l7.MOBILE_PREFIXES) and 'admin' in r['roles']
+    ]
+    assert offenders == []
 
 
 def test_child_inherits_parent_roles():

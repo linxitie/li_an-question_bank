@@ -56,7 +56,13 @@ const VTJ_LOCKED_VERSIONS = {
 //   使远端为 133；再叠加本线 /mobile/paper-result 1 条 = 134。
 //   注：`/admin/papers` 页面路由在本线已按「试卷收敛 P4=A」改成 redirect（无 component），
 //   远端仍保留页面版，合并取本线的 redirect，所以不是 135。与 test_route_roles 的 134 同步）
-const EXPECTED_DYNAMIC_IMPORTS = 134;
+// 142 -> 146（2026-11-17 合并两条工作线，实测 parse_route_records 计数）：
+//   远端三端登录 P2/P3/P4 带来 8 条教师设备端只读页
+//   （/tablet|/mobile 的 teacher home / questions / papers / scores，组件双端复用，守 R12）
+//   → 134 + 8 = 142；本线 v9 再补 4 条真实页面
+//   （/practice-center、/teacher/point-review、/teacher/content-repair、/inbox）→ 146。
+//   与 backend/tests/test_route_roles.py 的 146 同步，改一处必须改两处。
+const EXPECTED_DYNAMIC_IMPORTS = 146;
 
 const violations = [];
 

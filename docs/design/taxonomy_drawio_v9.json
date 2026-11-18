@@ -1,0 +1,8808 @@
+{
+ "source": "C:/Users/21499/OneDrive/Desktop/三层知识分类.drawio",
+ "summary": {
+  "roots": [
+   {
+    "name": "行测",
+    "children": 7,
+    "depth_max": 3
+   },
+   {
+    "name": "申论",
+    "children": 5,
+    "depth_max": 3
+   },
+   {
+    "name": "公专",
+    "children": 3,
+    "depth_max": 3
+   }
+  ],
+  "by_subject": {
+   "行测": {
+    "knowledge_point": 7,
+    "point": 27,
+    "detail": 129
+   },
+   "申论": {
+    "knowledge_point": 5,
+    "point": 25,
+    "detail": 108
+   },
+   "公专": {
+    "knowledge_point": 3,
+    "point": 35,
+    "detail": 166
+   }
+  },
+  "total_nodes": 508,
+  "other_nodes": 86,
+  "other_paths_sample": [
+   "行测 / 政治理论 / 习近平新时代中国特色社会主义思想 / 其他",
+   "行测 / 政治理论 / 党的二十大精神 / 其他",
+   "行测 / 政治理论 / 党的二十大精神 / 其他",
+   "行测 / 政治理论 / 党和国家方针政策 / 其他",
+   "行测 / 政治理论 / 政治立场与政治敏锐性 / 其他",
+   "行测 / 常识判断 / 经济常识 / 其他",
+   "行测 / 常识判断 / 文化常识 / 其他",
+   "行测 / 常识判断 / 社会常识 / 其他",
+   "行测 / 常识判断 / 时政热点 / 其他",
+   "行测 / 常识判断 / 生态常识 / 其他",
+   "行测 / 常识判断 / 科技常识 / 其他",
+   "行测 / 常识判断 / 法律常识 / 其他",
+   "行测 / 言语理解与表达 / 逻辑填空 / 其他",
+   "行测 / 言语理解与表达 / 片段阅读 / 其他",
+   "行测 / 言语理解与表达 / 语句表达 / 其他",
+   "行测 / 数量关系 / 数字推理 / 其他",
+   "行测 / 数量关系 / 数学运算 / 其他",
+   "行测 / 判断推理 / 图形推理 / 其他",
+   "行测 / 判断推理 / 逻辑推理 / 其他",
+   "行测 / 判断推理 / 类比推理 / 其他"
+  ]
+ },
+ "tree": [
+  {
+   "name": "行测",
+   "level": "科目",
+   "children": [
+    {
+     "name": "政治理论",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "习近平新时代中国特色社会主义思想",
+       "level": "考点",
+       "children": [
+        {
+         "name": "习近平法治思想",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "总体国家安全观",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "中国式现代化",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "公安工作重要论述",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "全面依法治国",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "党的二十大精神",
+       "level": "考点",
+       "children": [
+        {
+         "name": "高质量发展",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "唯物论",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "认识论",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "马克思主义基本原理",
+       "level": "考点",
+       "children": [
+        {
+         "name": "辩证法",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "唯物史观",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "党和国家方针政策",
+       "level": "考点",
+       "children": [
+        {
+         "name": "重要文件",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "重大会议讲话",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "政治立场与忠诚度",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "领导重要讲话",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "政治鉴别能力",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "政治立场与政治敏锐性",
+       "level": "考点",
+       "children": [
+        {
+         "name": "政治敏锐度",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "常识判断",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "经济常识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "宏观经济",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "微观经济",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "中国历史",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "国际经济",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "传统民俗",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "文化常识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "文学常识",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "社会保障",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "自然资源",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "社会常识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "公共管理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "时政热点",
+       "level": "考点",
+       "children": [
+        {
+         "name": "重要会议",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "重大政策",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "生态文明",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "社会热点",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "自然资源",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "生态常识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "环境保护",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "科技常识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "物理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "化学",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "生物",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "生活科技",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "法律常识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "宪法",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "刑法",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "民法",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "行政法",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "言语理解与表达",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "逻辑填空",
+       "level": "考点",
+       "children": [
+        {
+         "name": "实词填空",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "成语填空",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "主旨概括",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "混搭填空",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "关联词",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "细节判断",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "词句理解",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "片段阅读",
+       "level": "考点",
+       "children": [
+        {
+         "name": "意图判断",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "语句排序",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "标题填入",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "接语选择",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "态度观点",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "语句表达",
+       "level": "考点",
+       "children": [
+        {
+         "name": "语句填空",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "病句辨析",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "数量关系",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "数字推理",
+       "level": "考点",
+       "children": [
+        {
+         "name": "等差序列",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "等比序列",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "积序列",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "和数列",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "幂次数",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "多级数列",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "数学运算",
+       "level": "考点",
+       "children": [
+        {
+         "name": "工程问题",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "行程问题",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "排列组合",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "概率问题",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "几何问题",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "经济利润",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "容斥问题",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "判断推理",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "图形推理",
+       "level": "考点",
+       "children": [
+        {
+         "name": "位置规律",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "样式规律",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "翻译推理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "属性规律",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "数量规律",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "加强削弱",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "空间重构",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "原因解释",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "逻辑推理",
+       "level": "考点",
+       "children": [
+        {
+         "name": "真假推理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "语义关系",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "日常结论",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "逻辑关系",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "类比推理",
+       "level": "考点",
+       "children": [
+        {
+         "name": "逻辑关系",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "定义推理",
+       "level": "考点",
+       "children": [
+        {
+         "name": "单定义",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "多定义",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "并列定义",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "资料分析",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "资料类型",
+       "level": "考点",
+       "children": [
+        {
+         "name": "文字资料",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "图形资料",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "增长率",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "表格资料",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "混合资料",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "平均数",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "统计术语",
+       "level": "考点",
+       "children": [
+        {
+         "name": "比重",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "截位直除",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "倍数",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "估算法",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "速算技巧",
+       "level": "考点",
+       "children": [
+        {
+         "name": "尾除法",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "知觉速度与准确性",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "同符查找",
+       "level": "考点",
+       "children": [
+        {
+         "name": "单字符核对",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "字符串核对",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "多行核对",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "数字区间定位",
+       "level": "考点",
+       "children": [
+        {
+         "name": "单位数区间",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "多位数区间",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "单字符替换",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "边界判断",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "规则替换",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "字符替换",
+       "level": "考点",
+       "children": [
+        {
+         "name": "多字符替换",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "申论",
+   "level": "科目",
+   "children": [
+    {
+     "name": "归纳概括",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "问题概括",
+       "level": "考点",
+       "children": [
+        {
+         "name": "单一问题",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "多重问题",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "主观问题",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "问题表现",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "原因概括",
+       "level": "考点",
+       "children": [
+        {
+         "name": "客观问题",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "多重问题",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "影响概括",
+       "level": "考点",
+       "children": [
+        {
+         "name": "积极印象",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "消极影响",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "辩证影响",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "对策概括",
+       "level": "考点",
+       "children": [
+        {
+         "name": "直接对策",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "简介对策",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "经验对策",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "特点概括",
+       "level": "考点",
+       "children": [
+        {
+         "name": "事物特点",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "做法特点",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "变化特地",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "过程概括",
+       "level": "考点",
+       "children": [
+        {
+         "name": "时间流程",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "工作流程",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "发展过程",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "综合分析",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "观点分析",
+       "level": "考点",
+       "children": [
+        {
+         "name": "观点判断",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "观点论证",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "观点评析",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "现象分析",
+       "level": "考点",
+       "children": [
+        {
+         "name": "现象定性",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "原因分析",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "影响分析",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "对策分析",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "词句理解",
+       "level": "考点",
+       "children": [
+        {
+         "name": "表层含义",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "深层含义",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "语境分析",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "评析辨析",
+       "level": "考点",
+       "children": [
+        {
+         "name": "评析标准",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "辨析方法",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "异同比较",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "结论表达",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "分歧比较",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "比较分析",
+       "level": "考点",
+       "children": [
+        {
+         "name": "优劣比较",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "提出对策",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "问题识别",
+       "level": "考点",
+       "children": [
+        {
+         "name": "问题优先级",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "问题清单",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "问题根源",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "对策建议",
+       "level": "考点",
+       "children": [
+        {
+         "name": "间接对策",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "直接对策",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "创新对策",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "方案设计",
+       "level": "考点",
+       "children": [
+        {
+         "name": "目标",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "措施",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "保障",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "评估",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "应急处理",
+       "level": "考点",
+       "children": [
+        {
+         "name": "应急原则",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "应急流程",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "应急保障",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "长效机制",
+       "level": "考点",
+       "children": [
+        {
+         "name": "制度机制",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "监督机制",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "保障机制",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "应用文写作",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "公文写作",
+       "level": "考点",
+       "children": [
+        {
+         "name": "通知",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "通报",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "请示",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "批复",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "报告",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "函",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "事务写作",
+       "level": "考点",
+       "children": [
+        {
+         "name": "讲话稿",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "倡议书",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "公开书",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "简报",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "汇报材料",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "工作总结",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "案例分析",
+       "level": "考点",
+       "children": [
+        {
+         "name": "案例概述",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "问题分析",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "对策建议",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "宣传文稿",
+       "level": "考点",
+       "children": [
+        {
+         "name": "新闻稿",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "评论",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "宣传文案",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "新媒体文案",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "议论文写作",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "命题作文",
+       "level": "考点",
+       "children": [
+        {
+         "name": "命题立意",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "结构安排",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "论证方法",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "话题作文",
+       "level": "考点",
+       "children": [
+        {
+         "name": "话题立意",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "角度选择",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "材料审读",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "素材运用",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "论证展开",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "材料作文",
+       "level": "考点",
+       "children": [
+        {
+         "name": "立意提炼",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "政论文",
+       "level": "考点",
+       "children": [
+        {
+         "name": "政治高度",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "政治论证",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "政策结合",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "政策文",
+       "level": "考点",
+       "children": [
+        {
+         "name": "问题导向",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "对策论证",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "可行性分析",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "公专",
+   "level": "科目",
+   "children": [
+    {
+     "name": "职业素养",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "政治立场与忠诚度",
+       "level": "考点",
+       "children": [
+        {
+         "name": "两个维护",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "政治忠诚",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "政治判断力",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "政治纪律",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "政治执行力",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "政治敏锐性能够与鉴别力",
+       "level": "考点",
+       "children": [
+        {
+         "name": "政治领悟力",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "忠诚",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "廉洁",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "人民警察核心价值观",
+       "level": "考点",
+       "children": [
+        {
+         "name": "为民",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "人民警察职业道德",
+       "level": "考点",
+       "children": [
+        {
+         "name": "职业道德规范",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "执法为民",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "纪律条令",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "服务群众",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "五条禁令",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "人民警察职业纪律",
+       "level": "考点",
+       "children": [
+        {
+         "name": "三项纪律",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "违纪情况",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "基础知识",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "中国特色社会主义",
+       "level": "考点",
+       "children": [
+        {
+         "name": "依法治国",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "执法为民",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "法的本体",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "公平正义",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "服务大局",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "法律责任",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "党的领导",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "法学基础理论",
+       "level": "考点",
+       "children": [
+        {
+         "name": "法的运行",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "法律适用",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "宪法基础知识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "国家制度",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "公民基本权利与义务",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "国家机构",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "宪法监督",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "民法基础知识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "民事主体",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "民事权利",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "民事责任",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "诉讼时效",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "人民警察法基础知识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "公安机关职权",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "人民警察职责",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "义务与纪律",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "组织管理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "执法监督",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "行政执法基础知识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "行政处罚",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "行政强制",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "行政许可",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "行政复议",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "行政管理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "刑事执法基础知识",
+       "level": "考点",
+       "children": [
+        {
+         "name": "刑事立案",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "侦查措施",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "强制措施",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "涉案财务管理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "案件移交",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "公安机关性质与职能",
+       "level": "考点",
+       "children": [
+        {
+         "name": "公安机关性质",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "职能职责",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "权限/义务",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "组织管理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "与其他国家机关关系",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "证据规则",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "公安工作基本原则",
+       "level": "考点",
+       "children": [
+        {
+         "name": "党对公安绝对领导",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "群众路线",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "专门工作与群众工作现结合",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "公安工作方针策略",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "公安队伍建设",
+       "level": "考点",
+       "children": [
+        {
+         "name": "政治建设",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "思想建设",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "内部监督",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "组织建设",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "作风建设",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "监督制度",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "错案责任追究",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "纪律建设",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "教育培训",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "公安执法监督",
+       "level": "考点",
+       "children": [
+        {
+         "name": "外部监督",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "执法责任制",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "name": "基本警务能力",
+     "level": "知识点",
+     "children": [
+      {
+       "name": "宣传教育",
+       "level": "考点",
+       "children": [
+        {
+         "name": "宣传内容",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "宣传方式",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "舆情引导",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "沟通协调",
+       "level": "考点",
+       "children": [
+        {
+         "name": "警民沟通",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "部门协调",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "媒体沟通",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "组织动员",
+       "level": "考点",
+       "children": [
+        {
+         "name": "群众动员",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "社会组织动员",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "应急动员",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "服务群众",
+       "level": "考点",
+       "children": [
+        {
+         "name": "社区服务",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "窗口服务",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "便民措施",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "调查研究",
+       "level": "考点",
+       "children": [
+        {
+         "name": "调查方式",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "信息核实",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "报告撰写",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "纠纷化解",
+       "level": "考点",
+       "children": [
+        {
+         "name": "矛盾纠纷排查",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "调解程序",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "多元化解",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "风险识别",
+       "level": "考点",
+       "children": [
+        {
+         "name": "风险源识别",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "风险评估",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "风险预警",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "风险防范",
+       "level": "考点",
+       "children": [
+        {
+         "name": "风险防控",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "隐患整改",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "应急预案",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "信息收集",
+       "level": "考点",
+       "children": [
+        {
+         "name": "信息来源",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "收集方式",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "信息录入",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "信息分析",
+       "level": "考点",
+       "children": [
+        {
+         "name": "信息研判",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "数据比对",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "情报分析",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "信息应用",
+       "level": "考点",
+       "children": [
+        {
+         "name": "信息共享",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "信息落地",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "信息反馈",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "巡逻",
+       "level": "考点",
+       "children": [
+        {
+         "name": "巡逻勤务规范",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "巡逻方式",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "巡逻重点",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "巡逻装备",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "巡逻处置",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "接警与处警",
+       "level": "考点",
+       "children": [
+        {
+         "name": "接警受理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "指挥调度",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "现场处置",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "带回处理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "移交反馈",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "安全检查",
+       "level": "考点",
+       "children": [
+        {
+         "name": "场所检查",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "物品检查",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "人身检查",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "安全检查程序",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "安全保护",
+       "level": "考点",
+       "children": [
+        {
+         "name": "重点人员保护",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "重点部位保护",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "大型活动安保",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "事态研判",
+       "level": "考点",
+       "children": [
+        {
+         "name": "现场评估",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "分级响应",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "趋势研判",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "信息上报",
+       "level": "考点",
+       "children": [
+        {
+         "name": "处置原理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "处置措施",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "武力使用",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "合理处置",
+       "level": "考点",
+       "children": [
+        {
+         "name": "现场清理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "善后处理",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "总结评估",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      },
+      {
+       "name": "善后恢复",
+       "level": "考点",
+       "children": [
+        {
+         "name": "上报内容",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "上报时限",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "上报流程",
+         "level": "细分",
+         "children": []
+        },
+        {
+         "name": "其他",
+         "level": "细分",
+         "children": []
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "flat": [
+  {
+   "name": "行测",
+   "depth": 0,
+   "path": "行测",
+   "subject": "行测",
+   "knowledge_point": "",
+   "point": "",
+   "detail": "",
+   "x": -210.0,
+   "y": 630.0,
+   "w": 1200.0
+  },
+  {
+   "name": "政治理论",
+   "depth": 1,
+   "path": "行测 / 政治理论",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "",
+   "detail": "",
+   "x": -210.0,
+   "y": 740.0,
+   "w": 550.0
+  },
+  {
+   "name": "习近平新时代中国特色社会主义思想",
+   "depth": 2,
+   "path": "行测 / 政治理论 / 习近平新时代中国特色社会主义思想",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "习近平新时代中国特色社会主义思想",
+   "detail": "",
+   "x": -210.0,
+   "y": 850.0,
+   "w": 170.0
+  },
+  {
+   "name": "习近平法治思想",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 习近平新时代中国特色社会主义思想 / 习近平法治思想",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "习近平新时代中国特色社会主义思想",
+   "detail": "习近平法治思想",
+   "x": -210.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "总体国家安全观",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 习近平新时代中国特色社会主义思想 / 总体国家安全观",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "习近平新时代中国特色社会主义思想",
+   "detail": "总体国家安全观",
+   "x": -120.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "中国式现代化",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 习近平新时代中国特色社会主义思想 / 中国式现代化",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "习近平新时代中国特色社会主义思想",
+   "detail": "中国式现代化",
+   "x": -20.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 习近平新时代中国特色社会主义思想 / 其他",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "习近平新时代中国特色社会主义思想",
+   "detail": "其他",
+   "x": -210.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "公安工作重要论述",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 习近平新时代中国特色社会主义思想 / 公安工作重要论述",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "习近平新时代中国特色社会主义思想",
+   "detail": "公安工作重要论述",
+   "x": -120.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "全面依法治国",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 习近平新时代中国特色社会主义思想 / 全面依法治国",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "习近平新时代中国特色社会主义思想",
+   "detail": "全面依法治国",
+   "x": -20.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "党的二十大精神",
+   "depth": 2,
+   "path": "行测 / 政治理论 / 党的二十大精神",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党的二十大精神",
+   "detail": "",
+   "x": -20.0,
+   "y": 850.0,
+   "w": 170.0
+  },
+  {
+   "name": "高质量发展",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党的二十大精神 / 高质量发展",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党的二十大精神",
+   "detail": "高质量发展",
+   "x": 70.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "唯物论",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党的二十大精神 / 唯物论",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党的二十大精神",
+   "detail": "唯物论",
+   "x": 170.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党的二十大精神 / 其他",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党的二十大精神",
+   "detail": "其他",
+   "x": 70.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "认识论",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党的二十大精神 / 认识论",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党的二十大精神",
+   "detail": "认识论",
+   "x": 170.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党的二十大精神 / 其他",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党的二十大精神",
+   "detail": "其他",
+   "x": 170.0,
+   "y": 1030.0,
+   "w": 80.0
+  },
+  {
+   "name": "马克思主义基本原理",
+   "depth": 2,
+   "path": "行测 / 政治理论 / 马克思主义基本原理",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "马克思主义基本原理",
+   "detail": "",
+   "x": 170.0,
+   "y": 850.0,
+   "w": 170.0
+  },
+  {
+   "name": "辩证法",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 马克思主义基本原理 / 辩证法",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "马克思主义基本原理",
+   "detail": "辩证法",
+   "x": 260.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "唯物史观",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 马克思主义基本原理 / 唯物史观",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "马克思主义基本原理",
+   "detail": "唯物史观",
+   "x": 260.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "党和国家方针政策",
+   "depth": 2,
+   "path": "行测 / 政治理论 / 党和国家方针政策",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党和国家方针政策",
+   "detail": "",
+   "x": -210.0,
+   "y": 1080.0,
+   "w": 170.0
+  },
+  {
+   "name": "重要文件",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党和国家方针政策 / 重要文件",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党和国家方针政策",
+   "detail": "重要文件",
+   "x": -210.0,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "重大会议讲话",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党和国家方针政策 / 重大会议讲话",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党和国家方针政策",
+   "detail": "重大会议讲话",
+   "x": -120.0,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "政治立场与忠诚度",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党和国家方针政策 / 政治立场与忠诚度",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党和国家方针政策",
+   "detail": "政治立场与忠诚度",
+   "x": -20.0,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "领导重要讲话",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党和国家方针政策 / 领导重要讲话",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党和国家方针政策",
+   "detail": "领导重要讲话",
+   "x": -210.0,
+   "y": 1210.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党和国家方针政策 / 其他",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党和国家方针政策",
+   "detail": "其他",
+   "x": -120.0,
+   "y": 1210.0,
+   "w": 80.0
+  },
+  {
+   "name": "政治鉴别能力",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 党和国家方针政策 / 政治鉴别能力",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "党和国家方针政策",
+   "detail": "政治鉴别能力",
+   "x": -20.0,
+   "y": 1210.0,
+   "w": 80.0
+  },
+  {
+   "name": "政治立场与政治敏锐性",
+   "depth": 2,
+   "path": "行测 / 政治理论 / 政治立场与政治敏锐性",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "政治立场与政治敏锐性",
+   "detail": "",
+   "x": -20.0,
+   "y": 1080.0,
+   "w": 170.0
+  },
+  {
+   "name": "政治敏锐度",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 政治立场与政治敏锐性 / 政治敏锐度",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "政治立场与政治敏锐性",
+   "detail": "政治敏锐度",
+   "x": 70.0,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 政治理论 / 政治立场与政治敏锐性 / 其他",
+   "subject": "行测",
+   "knowledge_point": "政治理论",
+   "point": "政治立场与政治敏锐性",
+   "detail": "其他",
+   "x": 70.0,
+   "y": 1210.0,
+   "w": 80.0
+  },
+  {
+   "name": "常识判断",
+   "depth": 1,
+   "path": "行测 / 常识判断",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "",
+   "detail": "",
+   "x": 400.0,
+   "y": 740.0,
+   "w": 560.0
+  },
+  {
+   "name": "经济常识",
+   "depth": 2,
+   "path": "行测 / 常识判断 / 经济常识",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "经济常识",
+   "detail": "",
+   "x": 400.0,
+   "y": 850.0,
+   "w": 180.0
+  },
+  {
+   "name": "宏观经济",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 经济常识 / 宏观经济",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "经济常识",
+   "detail": "宏观经济",
+   "x": 400.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "微观经济",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 经济常识 / 微观经济",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "经济常识",
+   "detail": "微观经济",
+   "x": 500.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "中国历史",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 经济常识 / 中国历史",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "经济常识",
+   "detail": "中国历史",
+   "x": 590.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "国际经济",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 经济常识 / 国际经济",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "经济常识",
+   "detail": "国际经济",
+   "x": 400.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 经济常识 / 其他",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "经济常识",
+   "detail": "其他",
+   "x": 500.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "传统民俗",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 经济常识 / 传统民俗",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "经济常识",
+   "detail": "传统民俗",
+   "x": 590.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "文化常识",
+   "depth": 2,
+   "path": "行测 / 常识判断 / 文化常识",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "文化常识",
+   "detail": "",
+   "x": 590.0,
+   "y": 850.0,
+   "w": 180.0
+  },
+  {
+   "name": "文学常识",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 文化常识 / 文学常识",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "文化常识",
+   "detail": "文学常识",
+   "x": 690.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "社会保障",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 文化常识 / 社会保障",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "文化常识",
+   "detail": "社会保障",
+   "x": 785.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 文化常识 / 其他",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "文化常识",
+   "detail": "其他",
+   "x": 690.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "自然资源",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 文化常识 / 自然资源",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "文化常识",
+   "detail": "自然资源",
+   "x": 790.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "社会常识",
+   "depth": 2,
+   "path": "行测 / 常识判断 / 社会常识",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "社会常识",
+   "detail": "",
+   "x": 780.0,
+   "y": 850.0,
+   "w": 180.0
+  },
+  {
+   "name": "公共管理",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 社会常识 / 公共管理",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "社会常识",
+   "detail": "公共管理",
+   "x": 880.0,
+   "y": 930.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 社会常识 / 其他",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "社会常识",
+   "detail": "其他",
+   "x": 880.0,
+   "y": 980.0,
+   "w": 80.0
+  },
+  {
+   "name": "时政热点",
+   "depth": 2,
+   "path": "行测 / 常识判断 / 时政热点",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "时政热点",
+   "detail": "",
+   "x": 400.0,
+   "y": 1080.0,
+   "w": 180.0
+  },
+  {
+   "name": "重要会议",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 时政热点 / 重要会议",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "时政热点",
+   "detail": "重要会议",
+   "x": 400.0,
+   "y": 1155.0,
+   "w": 80.0
+  },
+  {
+   "name": "重大政策",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 时政热点 / 重大政策",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "时政热点",
+   "detail": "重大政策",
+   "x": 500.0,
+   "y": 1155.0,
+   "w": 80.0
+  },
+  {
+   "name": "生态文明",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 时政热点 / 生态文明",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "时政热点",
+   "detail": "生态文明",
+   "x": 590.0,
+   "y": 1155.0,
+   "w": 80.0
+  },
+  {
+   "name": "社会热点",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 时政热点 / 社会热点",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "时政热点",
+   "detail": "社会热点",
+   "x": 400.0,
+   "y": 1200.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 时政热点 / 其他",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "时政热点",
+   "detail": "其他",
+   "x": 500.0,
+   "y": 1200.0,
+   "w": 80.0
+  },
+  {
+   "name": "自然资源",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 时政热点 / 自然资源",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "时政热点",
+   "detail": "自然资源",
+   "x": 590.0,
+   "y": 1200.0,
+   "w": 80.0
+  },
+  {
+   "name": "生态常识",
+   "depth": 2,
+   "path": "行测 / 常识判断 / 生态常识",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "生态常识",
+   "detail": "",
+   "x": 590.0,
+   "y": 1080.0,
+   "w": 180.0
+  },
+  {
+   "name": "环境保护",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 生态常识 / 环境保护",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "生态常识",
+   "detail": "环境保护",
+   "x": 690.0,
+   "y": 1155.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 生态常识 / 其他",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "生态常识",
+   "detail": "其他",
+   "x": 690.0,
+   "y": 1200.0,
+   "w": 80.0
+  },
+  {
+   "name": "科技常识",
+   "depth": 2,
+   "path": "行测 / 常识判断 / 科技常识",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "科技常识",
+   "detail": "",
+   "x": 785.0,
+   "y": 1080.0,
+   "w": 175.0
+  },
+  {
+   "name": "物理",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 科技常识 / 物理",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "科技常识",
+   "detail": "物理",
+   "x": 785.0,
+   "y": 1155.0,
+   "w": 80.0
+  },
+  {
+   "name": "化学",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 科技常识 / 化学",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "科技常识",
+   "detail": "化学",
+   "x": 880.0,
+   "y": 1155.0,
+   "w": 80.0
+  },
+  {
+   "name": "生物",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 科技常识 / 生物",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "科技常识",
+   "detail": "生物",
+   "x": 785.0,
+   "y": 1200.0,
+   "w": 80.0
+  },
+  {
+   "name": "生活科技",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 科技常识 / 生活科技",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "科技常识",
+   "detail": "生活科技",
+   "x": 880.0,
+   "y": 1200.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 科技常识 / 其他",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "科技常识",
+   "detail": "其他",
+   "x": 880.0,
+   "y": 1240.0,
+   "w": 80.0
+  },
+  {
+   "name": "法律常识",
+   "depth": 2,
+   "path": "行测 / 常识判断 / 法律常识",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "法律常识",
+   "detail": "",
+   "x": 400.0,
+   "y": 1280.0,
+   "w": 180.0
+  },
+  {
+   "name": "宪法",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 法律常识 / 宪法",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "法律常识",
+   "detail": "宪法",
+   "x": 400.0,
+   "y": 1360.0,
+   "w": 80.0
+  },
+  {
+   "name": "刑法",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 法律常识 / 刑法",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "法律常识",
+   "detail": "刑法",
+   "x": 500.0,
+   "y": 1360.0,
+   "w": 80.0
+  },
+  {
+   "name": "民法",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 法律常识 / 民法",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "法律常识",
+   "detail": "民法",
+   "x": 400.0,
+   "y": 1410.0,
+   "w": 80.0
+  },
+  {
+   "name": "行政法",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 法律常识 / 行政法",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "法律常识",
+   "detail": "行政法",
+   "x": 500.0,
+   "y": 1410.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 常识判断 / 法律常识 / 其他",
+   "subject": "行测",
+   "knowledge_point": "常识判断",
+   "point": "法律常识",
+   "detail": "其他",
+   "x": 500.0,
+   "y": 1460.0,
+   "w": 80.0
+  },
+  {
+   "name": "言语理解与表达",
+   "depth": 1,
+   "path": "行测 / 言语理解与表达",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "",
+   "detail": "",
+   "x": -210.0,
+   "y": 1320.0,
+   "w": 550.0
+  },
+  {
+   "name": "逻辑填空",
+   "depth": 2,
+   "path": "行测 / 言语理解与表达 / 逻辑填空",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "逻辑填空",
+   "detail": "",
+   "x": -210.0,
+   "y": 1420.0,
+   "w": 170.0
+  },
+  {
+   "name": "实词填空",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 逻辑填空 / 实词填空",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "逻辑填空",
+   "detail": "实词填空",
+   "x": -215.0,
+   "y": 1500.0,
+   "w": 80.0
+  },
+  {
+   "name": "成语填空",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 逻辑填空 / 成语填空",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "逻辑填空",
+   "detail": "成语填空",
+   "x": -120.0,
+   "y": 1500.0,
+   "w": 80.0
+  },
+  {
+   "name": "主旨概括",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 逻辑填空 / 主旨概括",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "逻辑填空",
+   "detail": "主旨概括",
+   "x": -20.0,
+   "y": 1500.0,
+   "w": 80.0
+  },
+  {
+   "name": "混搭填空",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 逻辑填空 / 混搭填空",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "逻辑填空",
+   "detail": "混搭填空",
+   "x": -215.0,
+   "y": 1540.0,
+   "w": 80.0
+  },
+  {
+   "name": "关联词",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 逻辑填空 / 关联词",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "逻辑填空",
+   "detail": "关联词",
+   "x": -120.0,
+   "y": 1540.0,
+   "w": 80.0
+  },
+  {
+   "name": "细节判断",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 逻辑填空 / 细节判断",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "逻辑填空",
+   "detail": "细节判断",
+   "x": -20.0,
+   "y": 1540.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 逻辑填空 / 其他",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "逻辑填空",
+   "detail": "其他",
+   "x": -120.0,
+   "y": 1580.0,
+   "w": 80.0
+  },
+  {
+   "name": "词句理解",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 逻辑填空 / 词句理解",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "逻辑填空",
+   "detail": "词句理解",
+   "x": -20.0,
+   "y": 1580.0,
+   "w": 80.0
+  },
+  {
+   "name": "片段阅读",
+   "depth": 2,
+   "path": "行测 / 言语理解与表达 / 片段阅读",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "片段阅读",
+   "detail": "",
+   "x": -20.0,
+   "y": 1420.0,
+   "w": 170.0
+  },
+  {
+   "name": "意图判断",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 片段阅读 / 意图判断",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "片段阅读",
+   "detail": "意图判断",
+   "x": 70.0,
+   "y": 1500.0,
+   "w": 80.0
+  },
+  {
+   "name": "语句排序",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 片段阅读 / 语句排序",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "片段阅读",
+   "detail": "语句排序",
+   "x": 170.0,
+   "y": 1500.0,
+   "w": 80.0
+  },
+  {
+   "name": "标题填入",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 片段阅读 / 标题填入",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "片段阅读",
+   "detail": "标题填入",
+   "x": 70.0,
+   "y": 1540.0,
+   "w": 80.0
+  },
+  {
+   "name": "接语选择",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 片段阅读 / 接语选择",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "片段阅读",
+   "detail": "接语选择",
+   "x": 170.0,
+   "y": 1540.0,
+   "w": 80.0
+  },
+  {
+   "name": "态度观点",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 片段阅读 / 态度观点",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "片段阅读",
+   "detail": "态度观点",
+   "x": 70.0,
+   "y": 1580.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 片段阅读 / 其他",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "片段阅读",
+   "detail": "其他",
+   "x": 70.0,
+   "y": 1620.0,
+   "w": 80.0
+  },
+  {
+   "name": "语句表达",
+   "depth": 2,
+   "path": "行测 / 言语理解与表达 / 语句表达",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "语句表达",
+   "detail": "",
+   "x": 170.0,
+   "y": 1420.0,
+   "w": 170.0
+  },
+  {
+   "name": "语句填空",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 语句表达 / 语句填空",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "语句表达",
+   "detail": "语句填空",
+   "x": 260.0,
+   "y": 1500.0,
+   "w": 80.0
+  },
+  {
+   "name": "病句辨析",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 语句表达 / 病句辨析",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "语句表达",
+   "detail": "病句辨析",
+   "x": 260.0,
+   "y": 1540.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 言语理解与表达 / 语句表达 / 其他",
+   "subject": "行测",
+   "knowledge_point": "言语理解与表达",
+   "point": "语句表达",
+   "detail": "其他",
+   "x": 260.0,
+   "y": 1580.0,
+   "w": 80.0
+  },
+  {
+   "name": "数量关系",
+   "depth": 1,
+   "path": "行测 / 数量关系",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "",
+   "detail": "",
+   "x": 400.0,
+   "y": 1560.0,
+   "w": 560.0
+  },
+  {
+   "name": "数字推理",
+   "depth": 2,
+   "path": "行测 / 数量关系 / 数字推理",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数字推理",
+   "detail": "",
+   "x": 452.5,
+   "y": 1650.0,
+   "w": 170.0
+  },
+  {
+   "name": "等差序列",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数字推理 / 等差序列",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数字推理",
+   "detail": "等差序列",
+   "x": 455.0,
+   "y": 1735.0,
+   "w": 80.0
+  },
+  {
+   "name": "等比序列",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数字推理 / 等比序列",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数字推理",
+   "detail": "等比序列",
+   "x": 545.0,
+   "y": 1735.0,
+   "w": 80.0
+  },
+  {
+   "name": "积序列",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数字推理 / 积序列",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数字推理",
+   "detail": "积序列",
+   "x": 455.0,
+   "y": 1780.0,
+   "w": 80.0
+  },
+  {
+   "name": "和数列",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数字推理 / 和数列",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数字推理",
+   "detail": "和数列",
+   "x": 547.5,
+   "y": 1780.0,
+   "w": 80.0
+  },
+  {
+   "name": "幂次数",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数字推理 / 幂次数",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数字推理",
+   "detail": "幂次数",
+   "x": 455.0,
+   "y": 1825.0,
+   "w": 80.0
+  },
+  {
+   "name": "多级数列",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数字推理 / 多级数列",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数字推理",
+   "detail": "多级数列",
+   "x": 547.5,
+   "y": 1825.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数字推理 / 其他",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数字推理",
+   "detail": "其他",
+   "x": 452.5,
+   "y": 1870.0,
+   "w": 80.0
+  },
+  {
+   "name": "数学运算",
+   "depth": 2,
+   "path": "行测 / 数量关系 / 数学运算",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数学运算",
+   "detail": "",
+   "x": 720.0,
+   "y": 1650.0,
+   "w": 170.0
+  },
+  {
+   "name": "工程问题",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数学运算 / 工程问题",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数学运算",
+   "detail": "工程问题",
+   "x": 720.0,
+   "y": 1735.0,
+   "w": 80.0
+  },
+  {
+   "name": "行程问题",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数学运算 / 行程问题",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数学运算",
+   "detail": "行程问题",
+   "x": 810.0,
+   "y": 1735.0,
+   "w": 80.0
+  },
+  {
+   "name": "排列组合",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数学运算 / 排列组合",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数学运算",
+   "detail": "排列组合",
+   "x": 720.0,
+   "y": 1780.0,
+   "w": 80.0
+  },
+  {
+   "name": "概率问题",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数学运算 / 概率问题",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数学运算",
+   "detail": "概率问题",
+   "x": 810.0,
+   "y": 1780.0,
+   "w": 80.0
+  },
+  {
+   "name": "几何问题",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数学运算 / 几何问题",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数学运算",
+   "detail": "几何问题",
+   "x": 720.0,
+   "y": 1820.0,
+   "w": 80.0
+  },
+  {
+   "name": "经济利润",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数学运算 / 经济利润",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数学运算",
+   "detail": "经济利润",
+   "x": 810.0,
+   "y": 1820.0,
+   "w": 80.0
+  },
+  {
+   "name": "容斥问题",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数学运算 / 容斥问题",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数学运算",
+   "detail": "容斥问题",
+   "x": 720.0,
+   "y": 1865.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 数量关系 / 数学运算 / 其他",
+   "subject": "行测",
+   "knowledge_point": "数量关系",
+   "point": "数学运算",
+   "detail": "其他",
+   "x": 810.0,
+   "y": 1865.0,
+   "w": 80.0
+  },
+  {
+   "name": "判断推理",
+   "depth": 1,
+   "path": "行测 / 判断推理",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "",
+   "detail": "",
+   "x": -210.0,
+   "y": 1750.0,
+   "w": 550.0
+  },
+  {
+   "name": "图形推理",
+   "depth": 2,
+   "path": "行测 / 判断推理 / 图形推理",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "",
+   "x": -210.0,
+   "y": 1850.0,
+   "w": 170.0
+  },
+  {
+   "name": "位置规律",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 图形推理 / 位置规律",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "位置规律",
+   "x": -210.0,
+   "y": 1925.0,
+   "w": 80.0
+  },
+  {
+   "name": "样式规律",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 图形推理 / 样式规律",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "样式规律",
+   "x": -120.0,
+   "y": 1925.0,
+   "w": 80.0
+  },
+  {
+   "name": "翻译推理",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 图形推理 / 翻译推理",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "翻译推理",
+   "x": -20.0,
+   "y": 1925.0,
+   "w": 80.0
+  },
+  {
+   "name": "属性规律",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 图形推理 / 属性规律",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "属性规律",
+   "x": -210.0,
+   "y": 1965.0,
+   "w": 80.0
+  },
+  {
+   "name": "数量规律",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 图形推理 / 数量规律",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "数量规律",
+   "x": -120.0,
+   "y": 1965.0,
+   "w": 80.0
+  },
+  {
+   "name": "加强削弱",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 图形推理 / 加强削弱",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "加强削弱",
+   "x": -20.0,
+   "y": 1965.0,
+   "w": 80.0
+  },
+  {
+   "name": "空间重构",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 图形推理 / 空间重构",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "空间重构",
+   "x": -210.0,
+   "y": 2005.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 图形推理 / 其他",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "其他",
+   "x": -120.0,
+   "y": 2005.0,
+   "w": 80.0
+  },
+  {
+   "name": "原因解释",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 图形推理 / 原因解释",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "图形推理",
+   "detail": "原因解释",
+   "x": -20.0,
+   "y": 2005.0,
+   "w": 80.0
+  },
+  {
+   "name": "逻辑推理",
+   "depth": 2,
+   "path": "行测 / 判断推理 / 逻辑推理",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "逻辑推理",
+   "detail": "",
+   "x": -20.0,
+   "y": 1850.0,
+   "w": 170.0
+  },
+  {
+   "name": "真假推理",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 逻辑推理 / 真假推理",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "逻辑推理",
+   "detail": "真假推理",
+   "x": 70.0,
+   "y": 1925.0,
+   "w": 80.0
+  },
+  {
+   "name": "语义关系",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 逻辑推理 / 语义关系",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "逻辑推理",
+   "detail": "语义关系",
+   "x": 170.0,
+   "y": 1925.0,
+   "w": 80.0
+  },
+  {
+   "name": "日常结论",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 逻辑推理 / 日常结论",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "逻辑推理",
+   "detail": "日常结论",
+   "x": 70.0,
+   "y": 1965.0,
+   "w": 80.0
+  },
+  {
+   "name": "逻辑关系",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 逻辑推理 / 逻辑关系",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "逻辑推理",
+   "detail": "逻辑关系",
+   "x": 170.0,
+   "y": 1965.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 逻辑推理 / 其他",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "逻辑推理",
+   "detail": "其他",
+   "x": 70.0,
+   "y": 2005.0,
+   "w": 80.0
+  },
+  {
+   "name": "类比推理",
+   "depth": 2,
+   "path": "行测 / 判断推理 / 类比推理",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "类比推理",
+   "detail": "",
+   "x": 170.0,
+   "y": 1850.0,
+   "w": 170.0
+  },
+  {
+   "name": "逻辑关系",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 类比推理 / 逻辑关系",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "类比推理",
+   "detail": "逻辑关系",
+   "x": 255.0,
+   "y": 1925.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 类比推理 / 其他",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "类比推理",
+   "detail": "其他",
+   "x": 255.0,
+   "y": 1965.0,
+   "w": 80.0
+  },
+  {
+   "name": "定义推理",
+   "depth": 2,
+   "path": "行测 / 判断推理 / 定义推理",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "定义推理",
+   "detail": "",
+   "x": -210.0,
+   "y": 2060.0,
+   "w": 170.0
+  },
+  {
+   "name": "单定义",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 定义推理 / 单定义",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "定义推理",
+   "detail": "单定义",
+   "x": -210.0,
+   "y": 2135.0,
+   "w": 80.0
+  },
+  {
+   "name": "多定义",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 定义推理 / 多定义",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "定义推理",
+   "detail": "多定义",
+   "x": -120.0,
+   "y": 2135.0,
+   "w": 80.0
+  },
+  {
+   "name": "并列定义",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 定义推理 / 并列定义",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "定义推理",
+   "detail": "并列定义",
+   "x": -210.0,
+   "y": 2175.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 判断推理 / 定义推理 / 其他",
+   "subject": "行测",
+   "knowledge_point": "判断推理",
+   "point": "定义推理",
+   "detail": "其他",
+   "x": -120.0,
+   "y": 2175.0,
+   "w": 80.0
+  },
+  {
+   "name": "资料分析",
+   "depth": 1,
+   "path": "行测 / 资料分析",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "",
+   "detail": "",
+   "x": 400.0,
+   "y": 1990.0,
+   "w": 560.0
+  },
+  {
+   "name": "资料类型",
+   "depth": 2,
+   "path": "行测 / 资料分析 / 资料类型",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "资料类型",
+   "detail": "",
+   "x": 400.0,
+   "y": 2075.0,
+   "w": 170.0
+  },
+  {
+   "name": "文字资料",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 资料类型 / 文字资料",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "资料类型",
+   "detail": "文字资料",
+   "x": 400.0,
+   "y": 2145.0,
+   "w": 80.0
+  },
+  {
+   "name": "图形资料",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 资料类型 / 图形资料",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "资料类型",
+   "detail": "图形资料",
+   "x": 490.0,
+   "y": 2145.0,
+   "w": 80.0
+  },
+  {
+   "name": "增长率",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 资料类型 / 增长率",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "资料类型",
+   "detail": "增长率",
+   "x": 590.0,
+   "y": 2145.0,
+   "w": 80.0
+  },
+  {
+   "name": "表格资料",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 资料类型 / 表格资料",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "资料类型",
+   "detail": "表格资料",
+   "x": 400.0,
+   "y": 2190.0,
+   "w": 80.0
+  },
+  {
+   "name": "混合资料",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 资料类型 / 混合资料",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "资料类型",
+   "detail": "混合资料",
+   "x": 490.0,
+   "y": 2190.0,
+   "w": 80.0
+  },
+  {
+   "name": "平均数",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 资料类型 / 平均数",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "资料类型",
+   "detail": "平均数",
+   "x": 590.0,
+   "y": 2190.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 资料类型 / 其他",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "资料类型",
+   "detail": "其他",
+   "x": 400.0,
+   "y": 2240.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 资料类型 / 其他",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "资料类型",
+   "detail": "其他",
+   "x": 590.0,
+   "y": 2240.0,
+   "w": 80.0
+  },
+  {
+   "name": "统计术语",
+   "depth": 2,
+   "path": "行测 / 资料分析 / 统计术语",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "统计术语",
+   "detail": "",
+   "x": 590.0,
+   "y": 2075.0,
+   "w": 170.0
+  },
+  {
+   "name": "比重",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 统计术语 / 比重",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "统计术语",
+   "detail": "比重",
+   "x": 680.0,
+   "y": 2145.0,
+   "w": 80.0
+  },
+  {
+   "name": "截位直除",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 统计术语 / 截位直除",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "统计术语",
+   "detail": "截位直除",
+   "x": 780.0,
+   "y": 2145.0,
+   "w": 80.0
+  },
+  {
+   "name": "倍数",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 统计术语 / 倍数",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "统计术语",
+   "detail": "倍数",
+   "x": 680.0,
+   "y": 2190.0,
+   "w": 80.0
+  },
+  {
+   "name": "估算法",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 统计术语 / 估算法",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "统计术语",
+   "detail": "估算法",
+   "x": 780.0,
+   "y": 2190.0,
+   "w": 80.0
+  },
+  {
+   "name": "速算技巧",
+   "depth": 2,
+   "path": "行测 / 资料分析 / 速算技巧",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "速算技巧",
+   "detail": "",
+   "x": 780.0,
+   "y": 2075.0,
+   "w": 180.0
+  },
+  {
+   "name": "尾除法",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 速算技巧 / 尾除法",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "速算技巧",
+   "detail": "尾除法",
+   "x": 880.0,
+   "y": 2145.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 资料分析 / 速算技巧 / 其他",
+   "subject": "行测",
+   "knowledge_point": "资料分析",
+   "point": "速算技巧",
+   "detail": "其他",
+   "x": 880.0,
+   "y": 2190.0,
+   "w": 80.0
+  },
+  {
+   "name": "知觉速度与准确性",
+   "depth": 1,
+   "path": "行测 / 知觉速度与准确性",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "",
+   "detail": "",
+   "x": -215.0,
+   "y": 2290.0,
+   "w": 550.0
+  },
+  {
+   "name": "同符查找",
+   "depth": 2,
+   "path": "行测 / 知觉速度与准确性 / 同符查找",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "同符查找",
+   "detail": "",
+   "x": -215.0,
+   "y": 2380.0,
+   "w": 175.0
+  },
+  {
+   "name": "单字符核对",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 同符查找 / 单字符核对",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "同符查找",
+   "detail": "单字符核对",
+   "x": -215.0,
+   "y": 2460.0,
+   "w": 80.0
+  },
+  {
+   "name": "字符串核对",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 同符查找 / 字符串核对",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "同符查找",
+   "detail": "字符串核对",
+   "x": -125.0,
+   "y": 2460.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 同符查找 / 其他",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "同符查找",
+   "detail": "其他",
+   "x": -215.0,
+   "y": 2510.0,
+   "w": 80.0
+  },
+  {
+   "name": "多行核对",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 同符查找 / 多行核对",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "同符查找",
+   "detail": "多行核对",
+   "x": -125.0,
+   "y": 2510.0,
+   "w": 80.0
+  },
+  {
+   "name": "数字区间定位",
+   "depth": 2,
+   "path": "行测 / 知觉速度与准确性 / 数字区间定位",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "数字区间定位",
+   "detail": "",
+   "x": -20.0,
+   "y": 2380.0,
+   "w": 170.0
+  },
+  {
+   "name": "单位数区间",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 数字区间定位 / 单位数区间",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "数字区间定位",
+   "detail": "单位数区间",
+   "x": -20.0,
+   "y": 2460.0,
+   "w": 80.0
+  },
+  {
+   "name": "多位数区间",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 数字区间定位 / 多位数区间",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "数字区间定位",
+   "detail": "多位数区间",
+   "x": 70.0,
+   "y": 2460.0,
+   "w": 80.0
+  },
+  {
+   "name": "单字符替换",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 数字区间定位 / 单字符替换",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "数字区间定位",
+   "detail": "单字符替换",
+   "x": 160.0,
+   "y": 2460.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 数字区间定位 / 其他",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "数字区间定位",
+   "detail": "其他",
+   "x": -20.0,
+   "y": 2510.0,
+   "w": 80.0
+  },
+  {
+   "name": "边界判断",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 数字区间定位 / 边界判断",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "数字区间定位",
+   "detail": "边界判断",
+   "x": 70.0,
+   "y": 2510.0,
+   "w": 80.0
+  },
+  {
+   "name": "规则替换",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 数字区间定位 / 规则替换",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "数字区间定位",
+   "detail": "规则替换",
+   "x": 160.0,
+   "y": 2510.0,
+   "w": 80.0
+  },
+  {
+   "name": "字符替换",
+   "depth": 2,
+   "path": "行测 / 知觉速度与准确性 / 字符替换",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "字符替换",
+   "detail": "",
+   "x": 160.0,
+   "y": 2380.0,
+   "w": 175.0
+  },
+  {
+   "name": "多字符替换",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 字符替换 / 多字符替换",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "字符替换",
+   "detail": "多字符替换",
+   "x": 250.0,
+   "y": 2460.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "行测 / 知觉速度与准确性 / 字符替换 / 其他",
+   "subject": "行测",
+   "knowledge_point": "知觉速度与准确性",
+   "point": "字符替换",
+   "detail": "其他",
+   "x": 250.0,
+   "y": 2510.0,
+   "w": 80.0
+  },
+  {
+   "name": "申论",
+   "depth": 0,
+   "path": "申论",
+   "subject": "申论",
+   "knowledge_point": "",
+   "point": "",
+   "detail": "",
+   "x": 1080.0,
+   "y": 630.0,
+   "w": 1280.0
+  },
+  {
+   "name": "归纳概括",
+   "depth": 1,
+   "path": "申论 / 归纳概括",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "",
+   "detail": "",
+   "x": 1110.0,
+   "y": 750.0,
+   "w": 580.0
+  },
+  {
+   "name": "问题概括",
+   "depth": 2,
+   "path": "申论 / 归纳概括 / 问题概括",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "问题概括",
+   "detail": "",
+   "x": 1110.0,
+   "y": 835.0,
+   "w": 190.0
+  },
+  {
+   "name": "单一问题",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 问题概括 / 单一问题",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "问题概括",
+   "detail": "单一问题",
+   "x": 1110.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "多重问题",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 问题概括 / 多重问题",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "问题概括",
+   "detail": "多重问题",
+   "x": 1220.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "主观问题",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 问题概括 / 主观问题",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "问题概括",
+   "detail": "主观问题",
+   "x": 1315.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 问题概括 / 其他",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "问题概括",
+   "detail": "其他",
+   "x": 1315.0,
+   "y": 960.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 问题概括 / 其他",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "问题概括",
+   "detail": "其他",
+   "x": 1110.0,
+   "y": 965.0,
+   "w": 80.0
+  },
+  {
+   "name": "问题表现",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 问题概括 / 问题表现",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "问题概括",
+   "detail": "问题表现",
+   "x": 1220.0,
+   "y": 965.0,
+   "w": 80.0
+  },
+  {
+   "name": "原因概括",
+   "depth": 2,
+   "path": "申论 / 归纳概括 / 原因概括",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "原因概括",
+   "detail": "",
+   "x": 1310.0,
+   "y": 835.0,
+   "w": 190.0
+  },
+  {
+   "name": "客观问题",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 原因概括 / 客观问题",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "原因概括",
+   "detail": "客观问题",
+   "x": 1415.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "多重问题",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 原因概括 / 多重问题",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "原因概括",
+   "detail": "多重问题",
+   "x": 1415.0,
+   "y": 960.0,
+   "w": 80.0
+  },
+  {
+   "name": "影响概括",
+   "depth": 2,
+   "path": "申论 / 归纳概括 / 影响概括",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "影响概括",
+   "detail": "",
+   "x": 1510.0,
+   "y": 835.0,
+   "w": 180.0
+  },
+  {
+   "name": "积极印象",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 影响概括 / 积极印象",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "影响概括",
+   "detail": "积极印象",
+   "x": 1510.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "消极影响",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 影响概括 / 消极影响",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "影响概括",
+   "detail": "消极影响",
+   "x": 1610.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 影响概括 / 其他",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "影响概括",
+   "detail": "其他",
+   "x": 1510.0,
+   "y": 960.0,
+   "w": 80.0
+  },
+  {
+   "name": "辩证影响",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 影响概括 / 辩证影响",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "影响概括",
+   "detail": "辩证影响",
+   "x": 1610.0,
+   "y": 960.0,
+   "w": 80.0
+  },
+  {
+   "name": "对策概括",
+   "depth": 2,
+   "path": "申论 / 归纳概括 / 对策概括",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "对策概括",
+   "detail": "",
+   "x": 1110.0,
+   "y": 1030.0,
+   "w": 190.0
+  },
+  {
+   "name": "直接对策",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 对策概括 / 直接对策",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "对策概括",
+   "detail": "直接对策",
+   "x": 1115.0,
+   "y": 1110.0,
+   "w": 80.0
+  },
+  {
+   "name": "简介对策",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 对策概括 / 简介对策",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "对策概括",
+   "detail": "简介对策",
+   "x": 1215.0,
+   "y": 1110.0,
+   "w": 80.0
+  },
+  {
+   "name": "经验对策",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 对策概括 / 经验对策",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "对策概括",
+   "detail": "经验对策",
+   "x": 1115.0,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 对策概括 / 其他",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "对策概括",
+   "detail": "其他",
+   "x": 1215.0,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "特点概括",
+   "depth": 2,
+   "path": "申论 / 归纳概括 / 特点概括",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "特点概括",
+   "detail": "",
+   "x": 1315.0,
+   "y": 1030.0,
+   "w": 185.0
+  },
+  {
+   "name": "事物特点",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 特点概括 / 事物特点",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "特点概括",
+   "detail": "事物特点",
+   "x": 1317.5,
+   "y": 1115.0,
+   "w": 80.0
+  },
+  {
+   "name": "做法特点",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 特点概括 / 做法特点",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "特点概括",
+   "detail": "做法特点",
+   "x": 1412.5,
+   "y": 1115.0,
+   "w": 80.0
+  },
+  {
+   "name": "变化特地",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 特点概括 / 变化特地",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "特点概括",
+   "detail": "变化特地",
+   "x": 1317.5,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 特点概括 / 其他",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "特点概括",
+   "detail": "其他",
+   "x": 1412.5,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "过程概括",
+   "depth": 2,
+   "path": "申论 / 归纳概括 / 过程概括",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "过程概括",
+   "detail": "",
+   "x": 1510.0,
+   "y": 1030.0,
+   "w": 180.0
+  },
+  {
+   "name": "时间流程",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 过程概括 / 时间流程",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "过程概括",
+   "detail": "时间流程",
+   "x": 1515.0,
+   "y": 1115.0,
+   "w": 80.0
+  },
+  {
+   "name": "工作流程",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 过程概括 / 工作流程",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "过程概括",
+   "detail": "工作流程",
+   "x": 1605.0,
+   "y": 1115.0,
+   "w": 80.0
+  },
+  {
+   "name": "发展过程",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 过程概括 / 发展过程",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "过程概括",
+   "detail": "发展过程",
+   "x": 1515.0,
+   "y": 1155.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 归纳概括 / 过程概括 / 其他",
+   "subject": "申论",
+   "knowledge_point": "归纳概括",
+   "point": "过程概括",
+   "detail": "其他",
+   "x": 1605.0,
+   "y": 1155.0,
+   "w": 80.0
+  },
+  {
+   "name": "综合分析",
+   "depth": 1,
+   "path": "申论 / 综合分析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "",
+   "detail": "",
+   "x": 1740.0,
+   "y": 750.0,
+   "w": 590.0
+  },
+  {
+   "name": "观点分析",
+   "depth": 2,
+   "path": "申论 / 综合分析 / 观点分析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "观点分析",
+   "detail": "",
+   "x": 1740.0,
+   "y": 835.0,
+   "w": 180.0
+  },
+  {
+   "name": "观点判断",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 观点分析 / 观点判断",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "观点分析",
+   "detail": "观点判断",
+   "x": 1740.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "观点论证",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 观点分析 / 观点论证",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "观点分析",
+   "detail": "观点论证",
+   "x": 1840.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "观点评析",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 观点分析 / 观点评析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "观点分析",
+   "detail": "观点评析",
+   "x": 1740.0,
+   "y": 950.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 观点分析 / 其他",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "观点分析",
+   "detail": "其他",
+   "x": 1840.0,
+   "y": 950.0,
+   "w": 80.0
+  },
+  {
+   "name": "现象分析",
+   "depth": 2,
+   "path": "申论 / 综合分析 / 现象分析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "现象分析",
+   "detail": "",
+   "x": 1940.0,
+   "y": 835.0,
+   "w": 180.0
+  },
+  {
+   "name": "现象定性",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 现象分析 / 现象定性",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "现象分析",
+   "detail": "现象定性",
+   "x": 1945.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "原因分析",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 现象分析 / 原因分析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "现象分析",
+   "detail": "原因分析",
+   "x": 2035.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "影响分析",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 现象分析 / 影响分析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "现象分析",
+   "detail": "影响分析",
+   "x": 1945.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "对策分析",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 现象分析 / 对策分析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "现象分析",
+   "detail": "对策分析",
+   "x": 2035.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 现象分析 / 其他",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "现象分析",
+   "detail": "其他",
+   "x": 1945.0,
+   "y": 1000.0,
+   "w": 80.0
+  },
+  {
+   "name": "词句理解",
+   "depth": 2,
+   "path": "申论 / 综合分析 / 词句理解",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "词句理解",
+   "detail": "",
+   "x": 2140.0,
+   "y": 835.0,
+   "w": 190.0
+  },
+  {
+   "name": "表层含义",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 词句理解 / 表层含义",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "词句理解",
+   "detail": "表层含义",
+   "x": 2145.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "深层含义",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 词句理解 / 深层含义",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "词句理解",
+   "detail": "深层含义",
+   "x": 2245.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "语境分析",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 词句理解 / 语境分析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "词句理解",
+   "detail": "语境分析",
+   "x": 2145.0,
+   "y": 950.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 词句理解 / 其他",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "词句理解",
+   "detail": "其他",
+   "x": 2245.0,
+   "y": 950.0,
+   "w": 80.0
+  },
+  {
+   "name": "评析辨析",
+   "depth": 2,
+   "path": "申论 / 综合分析 / 评析辨析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "评析辨析",
+   "detail": "",
+   "x": 1740.0,
+   "y": 1060.0,
+   "w": 180.0
+  },
+  {
+   "name": "评析标准",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 评析辨析 / 评析标准",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "评析辨析",
+   "detail": "评析标准",
+   "x": 1745.0,
+   "y": 1132.5,
+   "w": 80.0
+  },
+  {
+   "name": "辨析方法",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 评析辨析 / 辨析方法",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "评析辨析",
+   "detail": "辨析方法",
+   "x": 1835.0,
+   "y": 1132.5,
+   "w": 80.0
+  },
+  {
+   "name": "异同比较",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 评析辨析 / 异同比较",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "评析辨析",
+   "detail": "异同比较",
+   "x": 1940.0,
+   "y": 1132.5,
+   "w": 80.0
+  },
+  {
+   "name": "结论表达",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 评析辨析 / 结论表达",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "评析辨析",
+   "detail": "结论表达",
+   "x": 1745.0,
+   "y": 1177.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 评析辨析 / 其他",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "评析辨析",
+   "detail": "其他",
+   "x": 1835.0,
+   "y": 1177.5,
+   "w": 80.0
+  },
+  {
+   "name": "分歧比较",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 评析辨析 / 分歧比较",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "评析辨析",
+   "detail": "分歧比较",
+   "x": 1940.0,
+   "y": 1177.5,
+   "w": 80.0
+  },
+  {
+   "name": "比较分析",
+   "depth": 2,
+   "path": "申论 / 综合分析 / 比较分析",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "比较分析",
+   "detail": "",
+   "x": 1940.0,
+   "y": 1060.0,
+   "w": 180.0
+  },
+  {
+   "name": "优劣比较",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 比较分析 / 优劣比较",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "比较分析",
+   "detail": "优劣比较",
+   "x": 2030.0,
+   "y": 1132.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 综合分析 / 比较分析 / 其他",
+   "subject": "申论",
+   "knowledge_point": "综合分析",
+   "point": "比较分析",
+   "detail": "其他",
+   "x": 2030.0,
+   "y": 1177.5,
+   "w": 80.0
+  },
+  {
+   "name": "提出对策",
+   "depth": 1,
+   "path": "申论 / 提出对策",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "",
+   "detail": "",
+   "x": 1110.0,
+   "y": 1280.0,
+   "w": 580.0
+  },
+  {
+   "name": "问题识别",
+   "depth": 2,
+   "path": "申论 / 提出对策 / 问题识别",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "问题识别",
+   "detail": "",
+   "x": 1110.0,
+   "y": 1360.0,
+   "w": 190.0
+  },
+  {
+   "name": "问题优先级",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 问题识别 / 问题优先级",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "问题识别",
+   "detail": "问题优先级",
+   "x": 1115.0,
+   "y": 1440.0,
+   "w": 80.0
+  },
+  {
+   "name": "问题清单",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 问题识别 / 问题清单",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "问题识别",
+   "detail": "问题清单",
+   "x": 1210.0,
+   "y": 1440.0,
+   "w": 80.0
+  },
+  {
+   "name": "问题根源",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 问题识别 / 问题根源",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "问题识别",
+   "detail": "问题根源",
+   "x": 1115.0,
+   "y": 1480.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 问题识别 / 其他",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "问题识别",
+   "detail": "其他",
+   "x": 1210.0,
+   "y": 1480.0,
+   "w": 80.0
+  },
+  {
+   "name": "对策建议",
+   "depth": 2,
+   "path": "申论 / 提出对策 / 对策建议",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "对策建议",
+   "detail": "",
+   "x": 1320.0,
+   "y": 1360.0,
+   "w": 180.0
+  },
+  {
+   "name": "间接对策",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 对策建议 / 间接对策",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "对策建议",
+   "detail": "间接对策",
+   "x": 1325.0,
+   "y": 1440.0,
+   "w": 80.0
+  },
+  {
+   "name": "直接对策",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 对策建议 / 直接对策",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "对策建议",
+   "detail": "直接对策",
+   "x": 1415.0,
+   "y": 1440.0,
+   "w": 80.0
+  },
+  {
+   "name": "创新对策",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 对策建议 / 创新对策",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "对策建议",
+   "detail": "创新对策",
+   "x": 1325.0,
+   "y": 1480.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 对策建议 / 其他",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "对策建议",
+   "detail": "其他",
+   "x": 1415.0,
+   "y": 1480.0,
+   "w": 80.0
+  },
+  {
+   "name": "方案设计",
+   "depth": 2,
+   "path": "申论 / 提出对策 / 方案设计",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "方案设计",
+   "detail": "",
+   "x": 1512.5,
+   "y": 1360.0,
+   "w": 170.0
+  },
+  {
+   "name": "目标",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 方案设计 / 目标",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "方案设计",
+   "detail": "目标",
+   "x": 1512.5,
+   "y": 1440.0,
+   "w": 80.0
+  },
+  {
+   "name": "措施",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 方案设计 / 措施",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "方案设计",
+   "detail": "措施",
+   "x": 1607.5,
+   "y": 1440.0,
+   "w": 80.0
+  },
+  {
+   "name": "保障",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 方案设计 / 保障",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "方案设计",
+   "detail": "保障",
+   "x": 1512.5,
+   "y": 1480.0,
+   "w": 80.0
+  },
+  {
+   "name": "评估",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 方案设计 / 评估",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "方案设计",
+   "detail": "评估",
+   "x": 1607.5,
+   "y": 1480.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 方案设计 / 其他",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "方案设计",
+   "detail": "其他",
+   "x": 1512.5,
+   "y": 1520.0,
+   "w": 80.0
+  },
+  {
+   "name": "应急处理",
+   "depth": 2,
+   "path": "申论 / 提出对策 / 应急处理",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "应急处理",
+   "detail": "",
+   "x": 1110.0,
+   "y": 1590.0,
+   "w": 185.0
+  },
+  {
+   "name": "应急原则",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 应急处理 / 应急原则",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "应急处理",
+   "detail": "应急原则",
+   "x": 1115.0,
+   "y": 1675.0,
+   "w": 80.0
+  },
+  {
+   "name": "应急流程",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 应急处理 / 应急流程",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "应急处理",
+   "detail": "应急流程",
+   "x": 1205.0,
+   "y": 1675.0,
+   "w": 80.0
+  },
+  {
+   "name": "应急保障",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 应急处理 / 应急保障",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "应急处理",
+   "detail": "应急保障",
+   "x": 1115.0,
+   "y": 1720.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 应急处理 / 其他",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "应急处理",
+   "detail": "其他",
+   "x": 1205.0,
+   "y": 1720.0,
+   "w": 80.0
+  },
+  {
+   "name": "长效机制",
+   "depth": 2,
+   "path": "申论 / 提出对策 / 长效机制",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "长效机制",
+   "detail": "",
+   "x": 1325.0,
+   "y": 1590.0,
+   "w": 180.0
+  },
+  {
+   "name": "制度机制",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 长效机制 / 制度机制",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "长效机制",
+   "detail": "制度机制",
+   "x": 1325.0,
+   "y": 1675.0,
+   "w": 80.0
+  },
+  {
+   "name": "监督机制",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 长效机制 / 监督机制",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "长效机制",
+   "detail": "监督机制",
+   "x": 1415.0,
+   "y": 1675.0,
+   "w": 80.0
+  },
+  {
+   "name": "保障机制",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 长效机制 / 保障机制",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "长效机制",
+   "detail": "保障机制",
+   "x": 1325.0,
+   "y": 1715.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 提出对策 / 长效机制 / 其他",
+   "subject": "申论",
+   "knowledge_point": "提出对策",
+   "point": "长效机制",
+   "detail": "其他",
+   "x": 1415.0,
+   "y": 1715.0,
+   "w": 80.0
+  },
+  {
+   "name": "应用文写作",
+   "depth": 1,
+   "path": "申论 / 应用文写作",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "",
+   "detail": "",
+   "x": 1740.0,
+   "y": 1280.0,
+   "w": 590.0
+  },
+  {
+   "name": "公文写作",
+   "depth": 2,
+   "path": "申论 / 应用文写作 / 公文写作",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "公文写作",
+   "detail": "",
+   "x": 1790.0,
+   "y": 1355.0,
+   "w": 180.0
+  },
+  {
+   "name": "通知",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 公文写作 / 通知",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "公文写作",
+   "detail": "通知",
+   "x": 1795.0,
+   "y": 1435.0,
+   "w": 80.0
+  },
+  {
+   "name": "通报",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 公文写作 / 通报",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "公文写作",
+   "detail": "通报",
+   "x": 1890.0,
+   "y": 1435.0,
+   "w": 80.0
+  },
+  {
+   "name": "请示",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 公文写作 / 请示",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "公文写作",
+   "detail": "请示",
+   "x": 1792.5,
+   "y": 1475.0,
+   "w": 80.0
+  },
+  {
+   "name": "批复",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 公文写作 / 批复",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "公文写作",
+   "detail": "批复",
+   "x": 1887.5,
+   "y": 1475.0,
+   "w": 80.0
+  },
+  {
+   "name": "报告",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 公文写作 / 报告",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "公文写作",
+   "detail": "报告",
+   "x": 1792.5,
+   "y": 1515.0,
+   "w": 80.0
+  },
+  {
+   "name": "函",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 公文写作 / 函",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "公文写作",
+   "detail": "函",
+   "x": 1887.5,
+   "y": 1515.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 公文写作 / 其他",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "公文写作",
+   "detail": "其他",
+   "x": 1792.5,
+   "y": 1555.0,
+   "w": 80.0
+  },
+  {
+   "name": "事务写作",
+   "depth": 2,
+   "path": "申论 / 应用文写作 / 事务写作",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "事务写作",
+   "detail": "",
+   "x": 2110.0,
+   "y": 1355.0,
+   "w": 180.0
+  },
+  {
+   "name": "讲话稿",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 事务写作 / 讲话稿",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "事务写作",
+   "detail": "讲话稿",
+   "x": 2112.5,
+   "y": 1435.0,
+   "w": 80.0
+  },
+  {
+   "name": "倡议书",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 事务写作 / 倡议书",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "事务写作",
+   "detail": "倡议书",
+   "x": 2207.5,
+   "y": 1435.0,
+   "w": 80.0
+  },
+  {
+   "name": "公开书",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 事务写作 / 公开书",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "事务写作",
+   "detail": "公开书",
+   "x": 2112.5,
+   "y": 1480.0,
+   "w": 80.0
+  },
+  {
+   "name": "简报",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 事务写作 / 简报",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "事务写作",
+   "detail": "简报",
+   "x": 2207.5,
+   "y": 1480.0,
+   "w": 80.0
+  },
+  {
+   "name": "汇报材料",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 事务写作 / 汇报材料",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "事务写作",
+   "detail": "汇报材料",
+   "x": 2112.5,
+   "y": 1525.0,
+   "w": 80.0
+  },
+  {
+   "name": "工作总结",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 事务写作 / 工作总结",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "事务写作",
+   "detail": "工作总结",
+   "x": 2207.5,
+   "y": 1525.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 事务写作 / 其他",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "事务写作",
+   "detail": "其他",
+   "x": 2112.5,
+   "y": 1565.0,
+   "w": 80.0
+  },
+  {
+   "name": "案例分析",
+   "depth": 2,
+   "path": "申论 / 应用文写作 / 案例分析",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "案例分析",
+   "detail": "",
+   "x": 1790.0,
+   "y": 1635.0,
+   "w": 177.5
+  },
+  {
+   "name": "案例概述",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 案例分析 / 案例概述",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "案例分析",
+   "detail": "案例概述",
+   "x": 1790.0,
+   "y": 1710.0,
+   "w": 80.0
+  },
+  {
+   "name": "问题分析",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 案例分析 / 问题分析",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "案例分析",
+   "detail": "问题分析",
+   "x": 1882.5,
+   "y": 1710.0,
+   "w": 80.0
+  },
+  {
+   "name": "对策建议",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 案例分析 / 对策建议",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "案例分析",
+   "detail": "对策建议",
+   "x": 1790.0,
+   "y": 1750.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 案例分析 / 其他",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "案例分析",
+   "detail": "其他",
+   "x": 1882.5,
+   "y": 1750.0,
+   "w": 80.0
+  },
+  {
+   "name": "宣传文稿",
+   "depth": 2,
+   "path": "申论 / 应用文写作 / 宣传文稿",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "宣传文稿",
+   "detail": "",
+   "x": 2110.0,
+   "y": 1635.0,
+   "w": 180.0
+  },
+  {
+   "name": "新闻稿",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 宣传文稿 / 新闻稿",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "宣传文稿",
+   "detail": "新闻稿",
+   "x": 2110.0,
+   "y": 1710.0,
+   "w": 80.0
+  },
+  {
+   "name": "评论",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 宣传文稿 / 评论",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "宣传文稿",
+   "detail": "评论",
+   "x": 2207.5,
+   "y": 1710.0,
+   "w": 80.0
+  },
+  {
+   "name": "宣传文案",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 宣传文稿 / 宣传文案",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "宣传文稿",
+   "detail": "宣传文案",
+   "x": 2110.0,
+   "y": 1755.0,
+   "w": 80.0
+  },
+  {
+   "name": "新媒体文案",
+   "depth": 3,
+   "path": "申论 / 应用文写作 / 宣传文稿 / 新媒体文案",
+   "subject": "申论",
+   "knowledge_point": "应用文写作",
+   "point": "宣传文稿",
+   "detail": "新媒体文案",
+   "x": 2207.5,
+   "y": 1755.0,
+   "w": 80.0
+  },
+  {
+   "name": "议论文写作",
+   "depth": 1,
+   "path": "申论 / 议论文写作",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "",
+   "detail": "",
+   "x": 1110.0,
+   "y": 1865.0,
+   "w": 580.0
+  },
+  {
+   "name": "命题作文",
+   "depth": 2,
+   "path": "申论 / 议论文写作 / 命题作文",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "命题作文",
+   "detail": "",
+   "x": 1110.0,
+   "y": 1960.0,
+   "w": 190.0
+  },
+  {
+   "name": "命题立意",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 命题作文 / 命题立意",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "命题作文",
+   "detail": "命题立意",
+   "x": 1117.5,
+   "y": 2030.0,
+   "w": 80.0
+  },
+  {
+   "name": "结构安排",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 命题作文 / 结构安排",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "命题作文",
+   "detail": "结构安排",
+   "x": 1212.5,
+   "y": 2030.0,
+   "w": 80.0
+  },
+  {
+   "name": "论证方法",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 命题作文 / 论证方法",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "命题作文",
+   "detail": "论证方法",
+   "x": 1117.5,
+   "y": 2075.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 命题作文 / 其他",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "命题作文",
+   "detail": "其他",
+   "x": 1212.5,
+   "y": 2075.0,
+   "w": 80.0
+  },
+  {
+   "name": "话题作文",
+   "depth": 2,
+   "path": "申论 / 议论文写作 / 话题作文",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "话题作文",
+   "detail": "",
+   "x": 1320.0,
+   "y": 1960.0,
+   "w": 172.5
+  },
+  {
+   "name": "话题立意",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 话题作文 / 话题立意",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "话题作文",
+   "detail": "话题立意",
+   "x": 1321.25,
+   "y": 2030.0,
+   "w": 80.0
+  },
+  {
+   "name": "角度选择",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 话题作文 / 角度选择",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "话题作文",
+   "detail": "角度选择",
+   "x": 1411.25,
+   "y": 2030.0,
+   "w": 80.0
+  },
+  {
+   "name": "材料审读",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 话题作文 / 材料审读",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "话题作文",
+   "detail": "材料审读",
+   "x": 1510.0,
+   "y": 2035.0,
+   "w": 80.0
+  },
+  {
+   "name": "素材运用",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 话题作文 / 素材运用",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "话题作文",
+   "detail": "素材运用",
+   "x": 1321.25,
+   "y": 2075.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 话题作文 / 其他",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "话题作文",
+   "detail": "其他",
+   "x": 1411.25,
+   "y": 2075.0,
+   "w": 80.0
+  },
+  {
+   "name": "论证展开",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 话题作文 / 论证展开",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "话题作文",
+   "detail": "论证展开",
+   "x": 1510.0,
+   "y": 2075.0,
+   "w": 80.0
+  },
+  {
+   "name": "材料作文",
+   "depth": 2,
+   "path": "申论 / 议论文写作 / 材料作文",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "材料作文",
+   "detail": "",
+   "x": 1510.0,
+   "y": 1960.0,
+   "w": 180.0
+  },
+  {
+   "name": "立意提炼",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 材料作文 / 立意提炼",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "材料作文",
+   "detail": "立意提炼",
+   "x": 1602.5,
+   "y": 2035.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 材料作文 / 其他",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "材料作文",
+   "detail": "其他",
+   "x": 1602.5,
+   "y": 2075.0,
+   "w": 80.0
+  },
+  {
+   "name": "政论文",
+   "depth": 2,
+   "path": "申论 / 议论文写作 / 政论文",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政论文",
+   "detail": "",
+   "x": 1112.5,
+   "y": 2135.0,
+   "w": 190.0
+  },
+  {
+   "name": "政治高度",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 政论文 / 政治高度",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政论文",
+   "detail": "政治高度",
+   "x": 1112.5,
+   "y": 2215.0,
+   "w": 80.0
+  },
+  {
+   "name": "政治论证",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 政论文 / 政治论证",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政论文",
+   "detail": "政治论证",
+   "x": 1202.5,
+   "y": 2215.0,
+   "w": 80.0
+  },
+  {
+   "name": "政策结合",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 政论文 / 政策结合",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政论文",
+   "detail": "政策结合",
+   "x": 1112.5,
+   "y": 2260.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 政论文 / 其他",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政论文",
+   "detail": "其他",
+   "x": 1202.5,
+   "y": 2260.0,
+   "w": 80.0
+  },
+  {
+   "name": "政策文",
+   "depth": 2,
+   "path": "申论 / 议论文写作 / 政策文",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政策文",
+   "detail": "",
+   "x": 1322.5,
+   "y": 2135.0,
+   "w": 170.0
+  },
+  {
+   "name": "问题导向",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 政策文 / 问题导向",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政策文",
+   "detail": "问题导向",
+   "x": 1322.5,
+   "y": 2215.0,
+   "w": 80.0
+  },
+  {
+   "name": "对策论证",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 政策文 / 对策论证",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政策文",
+   "detail": "对策论证",
+   "x": 1412.5,
+   "y": 2215.0,
+   "w": 80.0
+  },
+  {
+   "name": "可行性分析",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 政策文 / 可行性分析",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政策文",
+   "detail": "可行性分析",
+   "x": 1322.5,
+   "y": 2260.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "申论 / 议论文写作 / 政策文 / 其他",
+   "subject": "申论",
+   "knowledge_point": "议论文写作",
+   "point": "政策文",
+   "detail": "其他",
+   "x": 1412.5,
+   "y": 2260.0,
+   "w": 80.0
+  },
+  {
+   "name": "公专",
+   "depth": 0,
+   "path": "公专",
+   "subject": "公专",
+   "knowledge_point": "",
+   "point": "",
+   "detail": "",
+   "x": 2410.0,
+   "y": 630.0,
+   "w": 1880.0
+  },
+  {
+   "name": "职业素养",
+   "depth": 1,
+   "path": "公专 / 职业素养",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "",
+   "detail": "",
+   "x": 2420.0,
+   "y": 750.0,
+   "w": 520.0
+  },
+  {
+   "name": "政治立场与忠诚度",
+   "depth": 2,
+   "path": "公专 / 职业素养 / 政治立场与忠诚度",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治立场与忠诚度",
+   "detail": "",
+   "x": 2420.0,
+   "y": 840.0,
+   "w": 160.0
+  },
+  {
+   "name": "两个维护",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治立场与忠诚度 / 两个维护",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治立场与忠诚度",
+   "detail": "两个维护",
+   "x": 2410.0,
+   "y": 915.0,
+   "w": 80.0
+  },
+  {
+   "name": "政治忠诚",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治立场与忠诚度 / 政治忠诚",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治立场与忠诚度",
+   "detail": "政治忠诚",
+   "x": 2500.0,
+   "y": 915.0,
+   "w": 80.0
+  },
+  {
+   "name": "政治判断力",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治立场与忠诚度 / 政治判断力",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治立场与忠诚度",
+   "detail": "政治判断力",
+   "x": 2585.0,
+   "y": 915.0,
+   "w": 80.0
+  },
+  {
+   "name": "政治纪律",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治立场与忠诚度 / 政治纪律",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治立场与忠诚度",
+   "detail": "政治纪律",
+   "x": 2410.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治立场与忠诚度 / 其他",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治立场与忠诚度",
+   "detail": "其他",
+   "x": 2500.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "政治执行力",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治立场与忠诚度 / 政治执行力",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治立场与忠诚度",
+   "detail": "政治执行力",
+   "x": 2585.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "政治敏锐性能够与鉴别力",
+   "depth": 2,
+   "path": "公专 / 职业素养 / 政治敏锐性能够与鉴别力",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治敏锐性能够与鉴别力",
+   "detail": "",
+   "x": 2590.0,
+   "y": 840.0,
+   "w": 170.0
+  },
+  {
+   "name": "政治领悟力",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治敏锐性能够与鉴别力 / 政治领悟力",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治敏锐性能够与鉴别力",
+   "detail": "政治领悟力",
+   "x": 2685.0,
+   "y": 915.0,
+   "w": 80.0
+  },
+  {
+   "name": "忠诚",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治敏锐性能够与鉴别力 / 忠诚",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治敏锐性能够与鉴别力",
+   "detail": "忠诚",
+   "x": 2770.0,
+   "y": 915.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治敏锐性能够与鉴别力 / 其他",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治敏锐性能够与鉴别力",
+   "detail": "其他",
+   "x": 2685.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "廉洁",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 政治敏锐性能够与鉴别力 / 廉洁",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "政治敏锐性能够与鉴别力",
+   "detail": "廉洁",
+   "x": 2770.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "人民警察核心价值观",
+   "depth": 2,
+   "path": "公专 / 职业素养 / 人民警察核心价值观",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察核心价值观",
+   "detail": "",
+   "x": 2770.0,
+   "y": 840.0,
+   "w": 170.0
+  },
+  {
+   "name": "为民",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察核心价值观 / 为民",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察核心价值观",
+   "detail": "为民",
+   "x": 2860.0,
+   "y": 915.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察核心价值观 / 其他",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察核心价值观",
+   "detail": "其他",
+   "x": 2860.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "人民警察职业道德",
+   "depth": 2,
+   "path": "公专 / 职业素养 / 人民警察职业道德",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业道德",
+   "detail": "",
+   "x": 2425.0,
+   "y": 1045.0,
+   "w": 170.0
+  },
+  {
+   "name": "职业道德规范",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察职业道德 / 职业道德规范",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业道德",
+   "detail": "职业道德规范",
+   "x": 2420.0,
+   "y": 1122.5,
+   "w": 80.0
+  },
+  {
+   "name": "执法为民",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察职业道德 / 执法为民",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业道德",
+   "detail": "执法为民",
+   "x": 2520.0,
+   "y": 1122.5,
+   "w": 80.0
+  },
+  {
+   "name": "纪律条令",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察职业道德 / 纪律条令",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业道德",
+   "detail": "纪律条令",
+   "x": 2615.0,
+   "y": 1122.5,
+   "w": 80.0
+  },
+  {
+   "name": "服务群众",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察职业道德 / 服务群众",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业道德",
+   "detail": "服务群众",
+   "x": 2420.0,
+   "y": 1167.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察职业道德 / 其他",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业道德",
+   "detail": "其他",
+   "x": 2520.0,
+   "y": 1167.5,
+   "w": 80.0
+  },
+  {
+   "name": "五条禁令",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察职业道德 / 五条禁令",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业道德",
+   "detail": "五条禁令",
+   "x": 2615.0,
+   "y": 1167.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察职业道德 / 其他",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业道德",
+   "detail": "其他",
+   "x": 2615.0,
+   "y": 1217.5,
+   "w": 80.0
+  },
+  {
+   "name": "人民警察职业纪律",
+   "depth": 2,
+   "path": "公专 / 职业素养 / 人民警察职业纪律",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业纪律",
+   "detail": "",
+   "x": 2615.0,
+   "y": 1045.0,
+   "w": 185.0
+  },
+  {
+   "name": "三项纪律",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察职业纪律 / 三项纪律",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业纪律",
+   "detail": "三项纪律",
+   "x": 2715.0,
+   "y": 1122.5,
+   "w": 80.0
+  },
+  {
+   "name": "违纪情况",
+   "depth": 3,
+   "path": "公专 / 职业素养 / 人民警察职业纪律 / 违纪情况",
+   "subject": "公专",
+   "knowledge_point": "职业素养",
+   "point": "人民警察职业纪律",
+   "detail": "违纪情况",
+   "x": 2715.0,
+   "y": 1167.5,
+   "w": 80.0
+  },
+  {
+   "name": "基础知识",
+   "depth": 1,
+   "path": "公专 / 基础知识",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "",
+   "detail": "",
+   "x": 2990.0,
+   "y": 750.0,
+   "w": 580.0
+  },
+  {
+   "name": "中国特色社会主义",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 中国特色社会主义",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "",
+   "x": 2990.0,
+   "y": 840.0,
+   "w": 190.0
+  },
+  {
+   "name": "依法治国",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 中国特色社会主义 / 依法治国",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "依法治国",
+   "x": 3000.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "执法为民",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 中国特色社会主义 / 执法为民",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "执法为民",
+   "x": 3090.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "法的本体",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 中国特色社会主义 / 法的本体",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "法的本体",
+   "x": 3200.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "公平正义",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 中国特色社会主义 / 公平正义",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "公平正义",
+   "x": 3000.0,
+   "y": 950.0,
+   "w": 80.0
+  },
+  {
+   "name": "服务大局",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 中国特色社会主义 / 服务大局",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "服务大局",
+   "x": 3090.0,
+   "y": 950.0,
+   "w": 80.0
+  },
+  {
+   "name": "法律责任",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 中国特色社会主义 / 法律责任",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "法律责任",
+   "x": 3200.0,
+   "y": 952.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 中国特色社会主义 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "其他",
+   "x": 3000.0,
+   "y": 990.0,
+   "w": 80.0
+  },
+  {
+   "name": "党的领导",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 中国特色社会主义 / 党的领导",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "党的领导",
+   "x": 3090.0,
+   "y": 990.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 中国特色社会主义 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "中国特色社会主义",
+   "detail": "其他",
+   "x": 3200.0,
+   "y": 992.5,
+   "w": 80.0
+  },
+  {
+   "name": "法学基础理论",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 法学基础理论",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "法学基础理论",
+   "detail": "",
+   "x": 3200.0,
+   "y": 840.0,
+   "w": 190.0
+  },
+  {
+   "name": "法的运行",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 法学基础理论 / 法的运行",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "法学基础理论",
+   "detail": "法的运行",
+   "x": 3290.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "法律适用",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 法学基础理论 / 法律适用",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "法学基础理论",
+   "detail": "法律适用",
+   "x": 3290.0,
+   "y": 952.5,
+   "w": 80.0
+  },
+  {
+   "name": "宪法基础知识",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 宪法基础知识",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "宪法基础知识",
+   "detail": "",
+   "x": 3400.0,
+   "y": 840.0,
+   "w": 180.0
+  },
+  {
+   "name": "国家制度",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 宪法基础知识 / 国家制度",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "宪法基础知识",
+   "detail": "国家制度",
+   "x": 3400.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "公民基本权利与义务",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 宪法基础知识 / 公民基本权利与义务",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "宪法基础知识",
+   "detail": "公民基本权利与义务",
+   "x": 3500.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "国家机构",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 宪法基础知识 / 国家机构",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "宪法基础知识",
+   "detail": "国家机构",
+   "x": 3400.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "宪法监督",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 宪法基础知识 / 宪法监督",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "宪法基础知识",
+   "detail": "宪法监督",
+   "x": 3500.0,
+   "y": 960.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 宪法基础知识 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "宪法基础知识",
+   "detail": "其他",
+   "x": 3400.0,
+   "y": 1000.0,
+   "w": 80.0
+  },
+  {
+   "name": "民法基础知识",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 民法基础知识",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "民法基础知识",
+   "detail": "",
+   "x": 2990.0,
+   "y": 1060.0,
+   "w": 190.0
+  },
+  {
+   "name": "民事主体",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 民法基础知识 / 民事主体",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "民法基础知识",
+   "detail": "民事主体",
+   "x": 3005.0,
+   "y": 1132.5,
+   "w": 80.0
+  },
+  {
+   "name": "民事权利",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 民法基础知识 / 民事权利",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "民法基础知识",
+   "detail": "民事权利",
+   "x": 3095.0,
+   "y": 1132.5,
+   "w": 80.0
+  },
+  {
+   "name": "民事责任",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 民法基础知识 / 民事责任",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "民法基础知识",
+   "detail": "民事责任",
+   "x": 3005.0,
+   "y": 1177.5,
+   "w": 80.0
+  },
+  {
+   "name": "诉讼时效",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 民法基础知识 / 诉讼时效",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "民法基础知识",
+   "detail": "诉讼时效",
+   "x": 3095.0,
+   "y": 1177.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 民法基础知识 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "民法基础知识",
+   "detail": "其他",
+   "x": 3005.0,
+   "y": 1222.5,
+   "w": 80.0
+  },
+  {
+   "name": "人民警察法基础知识",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 人民警察法基础知识",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "人民警察法基础知识",
+   "detail": "",
+   "x": 3200.0,
+   "y": 1062.5,
+   "w": 190.0
+  },
+  {
+   "name": "公安机关职权",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 人民警察法基础知识 / 公安机关职权",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "人民警察法基础知识",
+   "detail": "公安机关职权",
+   "x": 3200.0,
+   "y": 1132.5,
+   "w": 80.0
+  },
+  {
+   "name": "人民警察职责",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 人民警察法基础知识 / 人民警察职责",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "人民警察法基础知识",
+   "detail": "人民警察职责",
+   "x": 3290.0,
+   "y": 1132.5,
+   "w": 80.0
+  },
+  {
+   "name": "义务与纪律",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 人民警察法基础知识 / 义务与纪律",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "人民警察法基础知识",
+   "detail": "义务与纪律",
+   "x": 3200.0,
+   "y": 1172.5,
+   "w": 80.0
+  },
+  {
+   "name": "组织管理",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 人民警察法基础知识 / 组织管理",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "人民警察法基础知识",
+   "detail": "组织管理",
+   "x": 3290.0,
+   "y": 1172.5,
+   "w": 80.0
+  },
+  {
+   "name": "执法监督",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 人民警察法基础知识 / 执法监督",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "人民警察法基础知识",
+   "detail": "执法监督",
+   "x": 3200.0,
+   "y": 1212.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 人民警察法基础知识 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "人民警察法基础知识",
+   "detail": "其他",
+   "x": 3290.0,
+   "y": 1212.5,
+   "w": 80.0
+  },
+  {
+   "name": "行政执法基础知识",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 行政执法基础知识",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "行政执法基础知识",
+   "detail": "",
+   "x": 3400.0,
+   "y": 1062.5,
+   "w": 180.0
+  },
+  {
+   "name": "行政处罚",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 行政执法基础知识 / 行政处罚",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "行政执法基础知识",
+   "detail": "行政处罚",
+   "x": 3405.0,
+   "y": 1130.0,
+   "w": 80.0
+  },
+  {
+   "name": "行政强制",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 行政执法基础知识 / 行政强制",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "行政执法基础知识",
+   "detail": "行政强制",
+   "x": 3495.0,
+   "y": 1130.0,
+   "w": 80.0
+  },
+  {
+   "name": "行政许可",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 行政执法基础知识 / 行政许可",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "行政执法基础知识",
+   "detail": "行政许可",
+   "x": 3405.0,
+   "y": 1170.0,
+   "w": 80.0
+  },
+  {
+   "name": "行政复议",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 行政执法基础知识 / 行政复议",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "行政执法基础知识",
+   "detail": "行政复议",
+   "x": 3495.0,
+   "y": 1170.0,
+   "w": 80.0
+  },
+  {
+   "name": "行政管理",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 行政执法基础知识 / 行政管理",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "行政执法基础知识",
+   "detail": "行政管理",
+   "x": 3405.0,
+   "y": 1210.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 行政执法基础知识 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "行政执法基础知识",
+   "detail": "其他",
+   "x": 3495.0,
+   "y": 1210.0,
+   "w": 80.0
+  },
+  {
+   "name": "刑事执法基础知识",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 刑事执法基础知识",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "刑事执法基础知识",
+   "detail": "",
+   "x": 2990.0,
+   "y": 1270.0,
+   "w": 190.0
+  },
+  {
+   "name": "刑事立案",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 刑事执法基础知识 / 刑事立案",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "刑事执法基础知识",
+   "detail": "刑事立案",
+   "x": 3000.0,
+   "y": 1340.0,
+   "w": 80.0
+  },
+  {
+   "name": "侦查措施",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 刑事执法基础知识 / 侦查措施",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "刑事执法基础知识",
+   "detail": "侦查措施",
+   "x": 3090.0,
+   "y": 1340.0,
+   "w": 80.0
+  },
+  {
+   "name": "强制措施",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 刑事执法基础知识 / 强制措施",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "刑事执法基础知识",
+   "detail": "强制措施",
+   "x": 3000.0,
+   "y": 1380.0,
+   "w": 80.0
+  },
+  {
+   "name": "涉案财务管理",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 刑事执法基础知识 / 涉案财务管理",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "刑事执法基础知识",
+   "detail": "涉案财务管理",
+   "x": 3090.0,
+   "y": 1380.0,
+   "w": 80.0
+  },
+  {
+   "name": "案件移交",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 刑事执法基础知识 / 案件移交",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "刑事执法基础知识",
+   "detail": "案件移交",
+   "x": 3000.0,
+   "y": 1420.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 刑事执法基础知识 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "刑事执法基础知识",
+   "detail": "其他",
+   "x": 3090.0,
+   "y": 1420.0,
+   "w": 80.0
+  },
+  {
+   "name": "公安机关性质与职能",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 公安机关性质与职能",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安机关性质与职能",
+   "detail": "",
+   "x": 3200.0,
+   "y": 1270.0,
+   "w": 190.0
+  },
+  {
+   "name": "公安机关性质",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安机关性质与职能 / 公安机关性质",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安机关性质与职能",
+   "detail": "公安机关性质",
+   "x": 3210.0,
+   "y": 1345.0,
+   "w": 80.0
+  },
+  {
+   "name": "职能职责",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安机关性质与职能 / 职能职责",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安机关性质与职能",
+   "detail": "职能职责",
+   "x": 3300.0,
+   "y": 1345.0,
+   "w": 80.0
+  },
+  {
+   "name": "权限/义务",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安机关性质与职能 / 权限/义务",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安机关性质与职能",
+   "detail": "权限/义务",
+   "x": 3210.0,
+   "y": 1395.0,
+   "w": 80.0
+  },
+  {
+   "name": "组织管理",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安机关性质与职能 / 组织管理",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安机关性质与职能",
+   "detail": "组织管理",
+   "x": 3300.0,
+   "y": 1395.0,
+   "w": 80.0
+  },
+  {
+   "name": "与其他国家机关关系",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安机关性质与职能 / 与其他国家机关关系",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安机关性质与职能",
+   "detail": "与其他国家机关关系",
+   "x": 3210.0,
+   "y": 1445.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安机关性质与职能 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安机关性质与职能",
+   "detail": "其他",
+   "x": 3300.0,
+   "y": 1445.0,
+   "w": 80.0
+  },
+  {
+   "name": "证据规则",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安机关性质与职能 / 证据规则",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安机关性质与职能",
+   "detail": "证据规则",
+   "x": 3210.0,
+   "y": 1495.0,
+   "w": 80.0
+  },
+  {
+   "name": "公安工作基本原则",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 公安工作基本原则",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安工作基本原则",
+   "detail": "",
+   "x": 3400.0,
+   "y": 1270.0,
+   "w": 180.0
+  },
+  {
+   "name": "党对公安绝对领导",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安工作基本原则 / 党对公安绝对领导",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安工作基本原则",
+   "detail": "党对公安绝对领导",
+   "x": 3410.0,
+   "y": 1347.5,
+   "w": 80.0
+  },
+  {
+   "name": "群众路线",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安工作基本原则 / 群众路线",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安工作基本原则",
+   "detail": "群众路线",
+   "x": 3500.0,
+   "y": 1347.5,
+   "w": 80.0
+  },
+  {
+   "name": "专门工作与群众工作现结合",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安工作基本原则 / 专门工作与群众工作现结合",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安工作基本原则",
+   "detail": "专门工作与群众工作现结合",
+   "x": 3410.0,
+   "y": 1387.5,
+   "w": 80.0
+  },
+  {
+   "name": "公安工作方针策略",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安工作基本原则 / 公安工作方针策略",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安工作基本原则",
+   "detail": "公安工作方针策略",
+   "x": 3500.0,
+   "y": 1387.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安工作基本原则 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安工作基本原则",
+   "detail": "其他",
+   "x": 3410.0,
+   "y": 1435.0,
+   "w": 80.0
+  },
+  {
+   "name": "公安队伍建设",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 公安队伍建设",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "",
+   "x": 2990.0,
+   "y": 1560.0,
+   "w": 190.0
+  },
+  {
+   "name": "政治建设",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 政治建设",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "政治建设",
+   "x": 2990.0,
+   "y": 1635.0,
+   "w": 80.0
+  },
+  {
+   "name": "思想建设",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 思想建设",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "思想建设",
+   "x": 3080.0,
+   "y": 1635.0,
+   "w": 80.0
+  },
+  {
+   "name": "内部监督",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 内部监督",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "内部监督",
+   "x": 3200.0,
+   "y": 1637.5,
+   "w": 80.0
+  },
+  {
+   "name": "组织建设",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 组织建设",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "组织建设",
+   "x": 2990.0,
+   "y": 1680.0,
+   "w": 80.0
+  },
+  {
+   "name": "作风建设",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 作风建设",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "作风建设",
+   "x": 3080.0,
+   "y": 1680.0,
+   "w": 80.0
+  },
+  {
+   "name": "监督制度",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 监督制度",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "监督制度",
+   "x": 3200.0,
+   "y": 1680.0,
+   "w": 80.0
+  },
+  {
+   "name": "错案责任追究",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 错案责任追究",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "错案责任追究",
+   "x": 3200.0,
+   "y": 1720.0,
+   "w": 80.0
+  },
+  {
+   "name": "纪律建设",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 纪律建设",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "纪律建设",
+   "x": 2990.0,
+   "y": 1725.0,
+   "w": 80.0
+  },
+  {
+   "name": "教育培训",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 教育培训",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "教育培训",
+   "x": 3080.0,
+   "y": 1725.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安队伍建设 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安队伍建设",
+   "detail": "其他",
+   "x": 2990.0,
+   "y": 1770.0,
+   "w": 80.0
+  },
+  {
+   "name": "公安执法监督",
+   "depth": 2,
+   "path": "公专 / 基础知识 / 公安执法监督",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安执法监督",
+   "detail": "",
+   "x": 3200.0,
+   "y": 1560.0,
+   "w": 190.0
+  },
+  {
+   "name": "外部监督",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安执法监督 / 外部监督",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安执法监督",
+   "detail": "外部监督",
+   "x": 3300.0,
+   "y": 1637.5,
+   "w": 80.0
+  },
+  {
+   "name": "执法责任制",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安执法监督 / 执法责任制",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安执法监督",
+   "detail": "执法责任制",
+   "x": 3300.0,
+   "y": 1680.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基础知识 / 公安执法监督 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基础知识",
+   "point": "公安执法监督",
+   "detail": "其他",
+   "x": 3300.0,
+   "y": 1720.0,
+   "w": 80.0
+  },
+  {
+   "name": "基本警务能力",
+   "depth": 1,
+   "path": "公专 / 基本警务能力",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "",
+   "detail": "",
+   "x": 3630.0,
+   "y": 750.0,
+   "w": 630.0
+  },
+  {
+   "name": "宣传教育",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 宣传教育",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "宣传教育",
+   "detail": "",
+   "x": 3630.0,
+   "y": 840.0,
+   "w": 210.0
+  },
+  {
+   "name": "宣传内容",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 宣传教育 / 宣传内容",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "宣传教育",
+   "detail": "宣传内容",
+   "x": 3740.0,
+   "y": 912.5,
+   "w": 80.0
+  },
+  {
+   "name": "宣传方式",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 宣传教育 / 宣传方式",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "宣传教育",
+   "detail": "宣传方式",
+   "x": 3650.0,
+   "y": 915.0,
+   "w": 80.0
+  },
+  {
+   "name": "舆情引导",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 宣传教育 / 舆情引导",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "宣传教育",
+   "detail": "舆情引导",
+   "x": 3650.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 宣传教育 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "宣传教育",
+   "detail": "其他",
+   "x": 3740.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "沟通协调",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 沟通协调",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "沟通协调",
+   "detail": "",
+   "x": 3865.0,
+   "y": 840.0,
+   "w": 195.0
+  },
+  {
+   "name": "警民沟通",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 沟通协调 / 警民沟通",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "沟通协调",
+   "detail": "警民沟通",
+   "x": 3875.0,
+   "y": 911.07,
+   "w": 80.0
+  },
+  {
+   "name": "部门协调",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 沟通协调 / 部门协调",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "沟通协调",
+   "detail": "部门协调",
+   "x": 3965.0,
+   "y": 911.07,
+   "w": 80.0
+  },
+  {
+   "name": "媒体沟通",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 沟通协调 / 媒体沟通",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "沟通协调",
+   "detail": "媒体沟通",
+   "x": 3875.0,
+   "y": 951.07,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 沟通协调 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "沟通协调",
+   "detail": "其他",
+   "x": 3965.0,
+   "y": 951.07,
+   "w": 80.0
+  },
+  {
+   "name": "组织动员",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 组织动员",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "组织动员",
+   "detail": "",
+   "x": 4090.0,
+   "y": 840.0,
+   "w": 170.0
+  },
+  {
+   "name": "群众动员",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 组织动员 / 群众动员",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "组织动员",
+   "detail": "群众动员",
+   "x": 4090.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "社会组织动员",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 组织动员 / 社会组织动员",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "组织动员",
+   "detail": "社会组织动员",
+   "x": 4180.0,
+   "y": 910.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 组织动员 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "组织动员",
+   "detail": "其他",
+   "x": 4180.0,
+   "y": 950.0,
+   "w": 80.0
+  },
+  {
+   "name": "应急动员",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 组织动员 / 应急动员",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "组织动员",
+   "detail": "应急动员",
+   "x": 4090.0,
+   "y": 955.0,
+   "w": 80.0
+  },
+  {
+   "name": "服务群众",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 服务群众",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "服务群众",
+   "detail": "",
+   "x": 3630.0,
+   "y": 1040.0,
+   "w": 210.0
+  },
+  {
+   "name": "社区服务",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 服务群众 / 社区服务",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "服务群众",
+   "detail": "社区服务",
+   "x": 3645.0,
+   "y": 1122.5,
+   "w": 80.0
+  },
+  {
+   "name": "窗口服务",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 服务群众 / 窗口服务",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "服务群众",
+   "detail": "窗口服务",
+   "x": 3745.0,
+   "y": 1122.5,
+   "w": 80.0
+  },
+  {
+   "name": "便民措施",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 服务群众 / 便民措施",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "服务群众",
+   "detail": "便民措施",
+   "x": 3645.0,
+   "y": 1162.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 服务群众 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "服务群众",
+   "detail": "其他",
+   "x": 3745.0,
+   "y": 1162.5,
+   "w": 80.0
+  },
+  {
+   "name": "调查研究",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 调查研究",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "调查研究",
+   "detail": "",
+   "x": 3870.0,
+   "y": 1040.0,
+   "w": 190.0
+  },
+  {
+   "name": "调查方式",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 调查研究 / 调查方式",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "调查研究",
+   "detail": "调查方式",
+   "x": 3875.0,
+   "y": 1120.0,
+   "w": 80.0
+  },
+  {
+   "name": "信息核实",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 调查研究 / 信息核实",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "调查研究",
+   "detail": "信息核实",
+   "x": 3965.0,
+   "y": 1120.0,
+   "w": 80.0
+  },
+  {
+   "name": "报告撰写",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 调查研究 / 报告撰写",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "调查研究",
+   "detail": "报告撰写",
+   "x": 3875.0,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 调查研究 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "调查研究",
+   "detail": "其他",
+   "x": 3965.0,
+   "y": 1160.0,
+   "w": 80.0
+  },
+  {
+   "name": "纠纷化解",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 纠纷化解",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "纠纷化解",
+   "detail": "",
+   "x": 4090.0,
+   "y": 1040.0,
+   "w": 170.0
+  },
+  {
+   "name": "矛盾纠纷排查",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 纠纷化解 / 矛盾纠纷排查",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "纠纷化解",
+   "detail": "矛盾纠纷排查",
+   "x": 4090.0,
+   "y": 1117.5,
+   "w": 80.0
+  },
+  {
+   "name": "调解程序",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 纠纷化解 / 调解程序",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "纠纷化解",
+   "detail": "调解程序",
+   "x": 4180.0,
+   "y": 1117.5,
+   "w": 80.0
+  },
+  {
+   "name": "多元化解",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 纠纷化解 / 多元化解",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "纠纷化解",
+   "detail": "多元化解",
+   "x": 4090.0,
+   "y": 1167.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 纠纷化解 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "纠纷化解",
+   "detail": "其他",
+   "x": 4180.0,
+   "y": 1167.5,
+   "w": 80.0
+  },
+  {
+   "name": "风险识别",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 风险识别",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险识别",
+   "detail": "",
+   "x": 3630.0,
+   "y": 1240.0,
+   "w": 210.0
+  },
+  {
+   "name": "风险源识别",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 风险识别 / 风险源识别",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险识别",
+   "detail": "风险源识别",
+   "x": 3645.0,
+   "y": 1330.0,
+   "w": 80.0
+  },
+  {
+   "name": "风险评估",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 风险识别 / 风险评估",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险识别",
+   "detail": "风险评估",
+   "x": 3735.0,
+   "y": 1330.0,
+   "w": 80.0
+  },
+  {
+   "name": "风险预警",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 风险识别 / 风险预警",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险识别",
+   "detail": "风险预警",
+   "x": 3645.0,
+   "y": 1370.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 风险识别 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险识别",
+   "detail": "其他",
+   "x": 3735.0,
+   "y": 1370.0,
+   "w": 80.0
+  },
+  {
+   "name": "风险防范",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 风险防范",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险防范",
+   "detail": "",
+   "x": 3875.0,
+   "y": 1240.0,
+   "w": 180.0
+  },
+  {
+   "name": "风险防控",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 风险防范 / 风险防控",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险防范",
+   "detail": "风险防控",
+   "x": 3880.0,
+   "y": 1327.5,
+   "w": 80.0
+  },
+  {
+   "name": "隐患整改",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 风险防范 / 隐患整改",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险防范",
+   "detail": "隐患整改",
+   "x": 3970.0,
+   "y": 1327.5,
+   "w": 80.0
+  },
+  {
+   "name": "应急预案",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 风险防范 / 应急预案",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险防范",
+   "detail": "应急预案",
+   "x": 3880.0,
+   "y": 1367.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 风险防范 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "风险防范",
+   "detail": "其他",
+   "x": 3970.0,
+   "y": 1367.5,
+   "w": 80.0
+  },
+  {
+   "name": "信息收集",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 信息收集",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息收集",
+   "detail": "",
+   "x": 4095.0,
+   "y": 1240.0,
+   "w": 170.0
+  },
+  {
+   "name": "信息来源",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息收集 / 信息来源",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息收集",
+   "detail": "信息来源",
+   "x": 4095.0,
+   "y": 1322.5,
+   "w": 80.0
+  },
+  {
+   "name": "收集方式",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息收集 / 收集方式",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息收集",
+   "detail": "收集方式",
+   "x": 4185.0,
+   "y": 1322.5,
+   "w": 80.0
+  },
+  {
+   "name": "信息录入",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息收集 / 信息录入",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息收集",
+   "detail": "信息录入",
+   "x": 4095.0,
+   "y": 1372.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息收集 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息收集",
+   "detail": "其他",
+   "x": 4185.0,
+   "y": 1372.5,
+   "w": 80.0
+  },
+  {
+   "name": "信息分析",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 信息分析",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息分析",
+   "detail": "",
+   "x": 3635.0,
+   "y": 1455.0,
+   "w": 205.0
+  },
+  {
+   "name": "信息研判",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息分析 / 信息研判",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息分析",
+   "detail": "信息研判",
+   "x": 3645.0,
+   "y": 1535.0,
+   "w": 80.0
+  },
+  {
+   "name": "数据比对",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息分析 / 数据比对",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息分析",
+   "detail": "数据比对",
+   "x": 3735.0,
+   "y": 1535.0,
+   "w": 80.0
+  },
+  {
+   "name": "情报分析",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息分析 / 情报分析",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息分析",
+   "detail": "情报分析",
+   "x": 3645.0,
+   "y": 1575.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息分析 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息分析",
+   "detail": "其他",
+   "x": 3735.0,
+   "y": 1575.0,
+   "w": 80.0
+  },
+  {
+   "name": "信息应用",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 信息应用",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息应用",
+   "detail": "",
+   "x": 3875.0,
+   "y": 1455.0,
+   "w": 185.0
+  },
+  {
+   "name": "信息共享",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息应用 / 信息共享",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息应用",
+   "detail": "信息共享",
+   "x": 3885.0,
+   "y": 1535.0,
+   "w": 80.0
+  },
+  {
+   "name": "信息落地",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息应用 / 信息落地",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息应用",
+   "detail": "信息落地",
+   "x": 3975.0,
+   "y": 1535.0,
+   "w": 80.0
+  },
+  {
+   "name": "信息反馈",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息应用 / 信息反馈",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息应用",
+   "detail": "信息反馈",
+   "x": 3885.0,
+   "y": 1575.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息应用 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息应用",
+   "detail": "其他",
+   "x": 3975.0,
+   "y": 1575.0,
+   "w": 80.0
+  },
+  {
+   "name": "巡逻",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 巡逻",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "巡逻",
+   "detail": "",
+   "x": 4095.0,
+   "y": 1455.0,
+   "w": 175.0
+  },
+  {
+   "name": "巡逻勤务规范",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 巡逻 / 巡逻勤务规范",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "巡逻",
+   "detail": "巡逻勤务规范",
+   "x": 4097.5,
+   "y": 1533.75,
+   "w": 80.0
+  },
+  {
+   "name": "巡逻方式",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 巡逻 / 巡逻方式",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "巡逻",
+   "detail": "巡逻方式",
+   "x": 4187.5,
+   "y": 1533.75,
+   "w": 80.0
+  },
+  {
+   "name": "巡逻重点",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 巡逻 / 巡逻重点",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "巡逻",
+   "detail": "巡逻重点",
+   "x": 4097.5,
+   "y": 1573.75,
+   "w": 80.0
+  },
+  {
+   "name": "巡逻装备",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 巡逻 / 巡逻装备",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "巡逻",
+   "detail": "巡逻装备",
+   "x": 4187.5,
+   "y": 1573.75,
+   "w": 80.0
+  },
+  {
+   "name": "巡逻处置",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 巡逻 / 巡逻处置",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "巡逻",
+   "detail": "巡逻处置",
+   "x": 4097.5,
+   "y": 1616.25,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 巡逻 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "巡逻",
+   "detail": "其他",
+   "x": 4187.5,
+   "y": 1616.25,
+   "w": 80.0
+  },
+  {
+   "name": "接警与处警",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 接警与处警",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "接警与处警",
+   "detail": "",
+   "x": 3635.0,
+   "y": 1660.0,
+   "w": 205.0
+  },
+  {
+   "name": "接警受理",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 接警与处警 / 接警受理",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "接警与处警",
+   "detail": "接警受理",
+   "x": 3645.0,
+   "y": 1740.0,
+   "w": 80.0
+  },
+  {
+   "name": "指挥调度",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 接警与处警 / 指挥调度",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "接警与处警",
+   "detail": "指挥调度",
+   "x": 3730.0,
+   "y": 1740.0,
+   "w": 80.0
+  },
+  {
+   "name": "现场处置",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 接警与处警 / 现场处置",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "接警与处警",
+   "detail": "现场处置",
+   "x": 3645.0,
+   "y": 1785.0,
+   "w": 80.0
+  },
+  {
+   "name": "带回处理",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 接警与处警 / 带回处理",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "接警与处警",
+   "detail": "带回处理",
+   "x": 3730.0,
+   "y": 1785.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 接警与处警 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "接警与处警",
+   "detail": "其他",
+   "x": 3645.0,
+   "y": 1830.0,
+   "w": 80.0
+  },
+  {
+   "name": "移交反馈",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 接警与处警 / 移交反馈",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "接警与处警",
+   "detail": "移交反馈",
+   "x": 3730.0,
+   "y": 1830.0,
+   "w": 80.0
+  },
+  {
+   "name": "安全检查",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 安全检查",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全检查",
+   "detail": "",
+   "x": 3875.0,
+   "y": 1660.0,
+   "w": 185.0
+  },
+  {
+   "name": "场所检查",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 安全检查 / 场所检查",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全检查",
+   "detail": "场所检查",
+   "x": 3880.0,
+   "y": 1737.5,
+   "w": 80.0
+  },
+  {
+   "name": "物品检查",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 安全检查 / 物品检查",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全检查",
+   "detail": "物品检查",
+   "x": 3970.0,
+   "y": 1737.5,
+   "w": 80.0
+  },
+  {
+   "name": "人身检查",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 安全检查 / 人身检查",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全检查",
+   "detail": "人身检查",
+   "x": 3880.0,
+   "y": 1782.5,
+   "w": 80.0
+  },
+  {
+   "name": "安全检查程序",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 安全检查 / 安全检查程序",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全检查",
+   "detail": "安全检查程序",
+   "x": 3970.0,
+   "y": 1782.5,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 安全检查 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全检查",
+   "detail": "其他",
+   "x": 3880.0,
+   "y": 1822.5,
+   "w": 80.0
+  },
+  {
+   "name": "安全保护",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 安全保护",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全保护",
+   "detail": "",
+   "x": 4095.0,
+   "y": 1660.0,
+   "w": 175.0
+  },
+  {
+   "name": "重点人员保护",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 安全保护 / 重点人员保护",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全保护",
+   "detail": "重点人员保护",
+   "x": 4097.5,
+   "y": 1735.0,
+   "w": 80.0
+  },
+  {
+   "name": "重点部位保护",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 安全保护 / 重点部位保护",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全保护",
+   "detail": "重点部位保护",
+   "x": 4187.5,
+   "y": 1735.0,
+   "w": 80.0
+  },
+  {
+   "name": "大型活动安保",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 安全保护 / 大型活动安保",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全保护",
+   "detail": "大型活动安保",
+   "x": 4097.5,
+   "y": 1780.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 安全保护 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "安全保护",
+   "detail": "其他",
+   "x": 4187.5,
+   "y": 1780.0,
+   "w": 80.0
+  },
+  {
+   "name": "事态研判",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 事态研判",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "事态研判",
+   "detail": "",
+   "x": 3635.0,
+   "y": 1905.0,
+   "w": 205.0
+  },
+  {
+   "name": "现场评估",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 事态研判 / 现场评估",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "事态研判",
+   "detail": "现场评估",
+   "x": 3645.0,
+   "y": 1990.0,
+   "w": 80.0
+  },
+  {
+   "name": "分级响应",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 事态研判 / 分级响应",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "事态研判",
+   "detail": "分级响应",
+   "x": 3735.0,
+   "y": 1990.0,
+   "w": 80.0
+  },
+  {
+   "name": "趋势研判",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 事态研判 / 趋势研判",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "事态研判",
+   "detail": "趋势研判",
+   "x": 3645.0,
+   "y": 2030.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 事态研判 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "事态研判",
+   "detail": "其他",
+   "x": 3735.0,
+   "y": 2030.0,
+   "w": 80.0
+  },
+  {
+   "name": "信息上报",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 信息上报",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息上报",
+   "detail": "",
+   "x": 3875.0,
+   "y": 1905.0,
+   "w": 185.0
+  },
+  {
+   "name": "处置原理",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息上报 / 处置原理",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息上报",
+   "detail": "处置原理",
+   "x": 3870.0,
+   "y": 1990.0,
+   "w": 80.0
+  },
+  {
+   "name": "处置措施",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息上报 / 处置措施",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息上报",
+   "detail": "处置措施",
+   "x": 3960.0,
+   "y": 1990.0,
+   "w": 80.0
+  },
+  {
+   "name": "武力使用",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息上报 / 武力使用",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息上报",
+   "detail": "武力使用",
+   "x": 3870.0,
+   "y": 2035.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 信息上报 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "信息上报",
+   "detail": "其他",
+   "x": 3960.0,
+   "y": 2035.0,
+   "w": 80.0
+  },
+  {
+   "name": "合理处置",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 合理处置",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "合理处置",
+   "detail": "",
+   "x": 4095.0,
+   "y": 1905.0,
+   "w": 175.0
+  },
+  {
+   "name": "现场清理",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 合理处置 / 现场清理",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "合理处置",
+   "detail": "现场清理",
+   "x": 4090.0,
+   "y": 1990.0,
+   "w": 80.0
+  },
+  {
+   "name": "善后处理",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 合理处置 / 善后处理",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "合理处置",
+   "detail": "善后处理",
+   "x": 4185.0,
+   "y": 1990.0,
+   "w": 80.0
+  },
+  {
+   "name": "总结评估",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 合理处置 / 总结评估",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "合理处置",
+   "detail": "总结评估",
+   "x": 4090.0,
+   "y": 2035.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 合理处置 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "合理处置",
+   "detail": "其他",
+   "x": 4185.0,
+   "y": 2035.0,
+   "w": 80.0
+  },
+  {
+   "name": "善后恢复",
+   "depth": 2,
+   "path": "公专 / 基本警务能力 / 善后恢复",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "善后恢复",
+   "detail": "",
+   "x": 3635.0,
+   "y": 2085.0,
+   "w": 205.0
+  },
+  {
+   "name": "上报内容",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 善后恢复 / 上报内容",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "善后恢复",
+   "detail": "上报内容",
+   "x": 3730.0,
+   "y": 2170.0,
+   "w": 80.0
+  },
+  {
+   "name": "上报时限",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 善后恢复 / 上报时限",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "善后恢复",
+   "detail": "上报时限",
+   "x": 3640.0,
+   "y": 2172.5,
+   "w": 80.0
+  },
+  {
+   "name": "上报流程",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 善后恢复 / 上报流程",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "善后恢复",
+   "detail": "上报流程",
+   "x": 3640.0,
+   "y": 2210.0,
+   "w": 80.0
+  },
+  {
+   "name": "其他",
+   "depth": 3,
+   "path": "公专 / 基本警务能力 / 善后恢复 / 其他",
+   "subject": "公专",
+   "knowledge_point": "基本警务能力",
+   "point": "善后恢复",
+   "detail": "其他",
+   "x": 3730.0,
+   "y": 2210.0,
+   "w": 80.0
+  }
+ ]
+}

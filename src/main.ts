@@ -71,10 +71,11 @@ const { provider, onReady } = createProvider({
  */
 async function checkVersionConsistency(): Promise<void> {
   // 用 typeof 兜底：dev server 未重启或未注入 define 时不能抛 ReferenceError 打断页面
+  const frontendVersion = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0';
   const frontendSha = typeof __BUILD_SHA__ === 'string' ? __BUILD_SHA__ : 'dev';
   const frontendTime = typeof __BUILD_TIME__ === 'string' ? __BUILD_TIME__ : new Date().toISOString();
-  window.__APP_BUILD__ = { sha: frontendSha, time: frontendTime };
-  console.info(`[砺安题库] 前端构建 ${frontendSha} @ ${frontendTime}`);
+  window.__APP_BUILD__ = { version: frontendVersion, sha: frontendSha, time: frontendTime };
+  console.info(`[砺安题库] 前端 v${frontendVersion} 构建 ${frontendSha} @ ${frontendTime}`);
 
   const isDev = import.meta.env.DEV;
   try {
@@ -82,23 +83,31 @@ async function checkVersionConsistency(): Promise<void> {
     if (!res.ok) return;
     const data = await res.json();
     const backend = typeof data?.revision === 'string' ? data.revision : '';
+    const backendVersion = typeof data?.version === 'string' ? data.version : '';
     window.__APP_BUILD__.backend = backend;
-    if (!backend || backend === 'unknown' || frontendSha === 'unknown') return;
+    window.__APP_BUILD__.backendVersion = backendVersion;
 
-    if (isDev) {
-      // dev 下两端启动时刻不同，SHA 不同步是常态，只留排查信息不打扰用户
-      if (backend !== frontendSha) {
-        console.info(
-          `[砺安题库] dev 模式：前端 SHA ${frontendSha} / 后端 ${backend}（属正常，dev server 与后端启动时刻不同）`
-        );
-      }
+    // 判定依据是版本号（两端读同一个 VERSION 文件），不是 SHA：
+    // dev 下前端 SHA 是 vite 启动那一刻、后端 SHA 是后端启动那一刻，天然不同，
+    // 拿 SHA 作判据会让「同版本」永远显示为「不一致」——正是用户看到的角标噪声。
+    const versionComparable = Boolean(backendVersion) && backendVersion !== '0.0.0';
+    if (versionComparable && backendVersion === frontendVersion) {
+      console.info(
+        `[砺安题库] 前后端版本一致 v${frontendVersion}（前端 ${frontendSha} / 后端 ${backend}）`
+      );
       return;
     }
 
-    if (backend === frontendSha) return;
-    window.__VERSION_MISMATCH__ = { frontend: frontendSha, backend };
+    if (isDev) {
+      console.info(
+        `[砺安题库] dev 模式：前端 v${frontendVersion}(${frontendSha}) / 后端 v${backendVersion}(${backend})，不一致时请重启后端`
+      );
+      return;
+    }
+
+    window.__VERSION_MISMATCH__ = { frontend: frontendVersion, backend: backendVersion || 'unknown' };
     console.warn(
-      `[砺安题库] 前后端版本不一致：前端 ${frontendSha} / 后端 ${backend}`
+      `[砺安题库] 前后端版本不一致：前端 v${frontendVersion} / 后端 v${backendVersion || 'unknown'}（${backend}）`
     );
     // dev 环境不弹 toast，只打日志（2026-11-07）：
     // `__BUILD_SHA__` 是 **vite 启动那一刻** 的 `git rev-parse --short HEAD`（见 vite.config 的 define），
@@ -108,7 +117,7 @@ async function checkVersionConsistency(): Promise<void> {
     if (process.env.NODE_ENV !== 'production') return;
     const { ElMessage } = await import('element-plus');
     ElMessage.warning({
-      message: `检测到前后端版本不一致（前端 ${frontendSha} / 后端 ${backend}），请刷新页面；若仍不一致则重启后端`,
+      message: `检测到前后端版本不一致（前端 v${frontendVersion} / 后端 v${backendVersion || '未知'}），请刷新页面；若仍不一致则重启后端`,
       duration: 8000,
     });
   } catch {

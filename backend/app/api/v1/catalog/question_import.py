@@ -2577,6 +2577,46 @@ def _resolve_confirm_subject(item: Dict[str, Any]) -> tuple:
     return '行测', True, 0.0
 
 
+# 解析期状态 → 库内整数枚举（D-37，2026-11-16）
+#
+# 解析器产出的是**业务字符串**（实测 preview_data 里 90 条全为 status='NEW'），
+# 而通用校验器 validate_question 的 status 只接受整数 {0, 1}。
+# 契约不一致时真实文档 90/90 全部被判 R-ENUM: status 必须是 [0, 1]，批量导入 100% 不可用。
+# 这里在入库前归一化，**不改校验器语义**（非空非法值仍报错）。
+_PARSE_STATUS_ALIASES = {
+    'NEW': 0,          # 解析产出的默认值 = 未发布
+    'DRAFT': 0,
+    'UNPUBLISHED': 0,
+    'PUBLISHED': 1,
+    'PUBLISH': 1,
+    'ONLINE': 1,
+    'ACTIVE': 1,
+}
+
+
+def normalize_parse_status(item: Dict[str, Any]) -> Dict[str, Any]:
+    """把解析期的字符串状态归一化成库内整数枚举；认不出的剔除，交给库默认值。"""
+    if not isinstance(item, dict):
+        return item
+    raw = item.get('status')
+    if not isinstance(raw, str):
+        return item                      # 已是 int/None，原样交给校验器判断
+    key = raw.strip().upper()
+    if key == '0':
+        item['status'] = 0
+    elif key == '1':
+        item['status'] = 1
+    elif key in ('',):
+        item.pop('status', None)
+    elif key in _PARSE_STATUS_ALIASES:
+        item['status'] = _PARSE_STATUS_ALIASES[key]
+    else:
+        # 认不出的业务态（如 ANSWER_ONLY）不在这里判死：交给上游答案卷闸门拒绝，
+        # 这里只保证不会因为"字符串出现在整数枚举里"而误杀正常题目。
+        item.pop('status', None)
+    return item
+
+
 @router.post("/confirm", summary="确认批量导入")
 async def confirm_batch_import(
     payload: Dict[str, Any],
@@ -2712,6 +2752,8 @@ async def confirm_batch_import(
                 })
                 continue
 
+            # D-37：把解析期字符串状态归一化成整数枚举后再交给通用校验器
+            normalize_parse_status(item)
             try:
                 ensure_valid(item, db, require_ids=False, cache=_confirm_refs)
                 # 清洗题目内容：去除推广/无关字段
@@ -2980,6 +3022,18 @@ async def confirm_batch_import(
         except Exception as e:
             logger.warning(f"[import] 广播导入完成事件失败(非阻断): {e}")
 
+        # v9 M7：导入完成即做内容缺口体检，把六类缺口随响应返回。
+        # 放在返回前而不是入库循环里：体检要读磁盘图片、要 join 题组材料，
+        # 放在循环里会把一次导入拖慢数倍，且失败会影响入库结果。
+        try:
+            from ....services import content_gaps as _content_gaps
+            _gap_ids = [getattr(q, 'question_id', None) for q in new_questions]
+            _gap_ids = [int(i) for i in _gap_ids if i]
+            gaps = _content_gaps.scan_ids(db, _gap_ids)
+        except Exception as _e:
+            logger.warning(f"[import] 内容缺口体检失败(非阻断): {_e}")
+            gaps = None
+
         message = f'导入完成：成功 {imported}，失败 {failed}，跳过 {skipped}'
         if group_stats['groups'] or group_stats['materials']:
             message += (f'；题组 {group_stats["groups"]}（成员 {group_stats["members"]}），'
@@ -2995,6 +3049,7 @@ async def confirm_batch_import(
             'paper_id': record.paper_id,
             'match_rate': preview_data.get('match_rate', 0),
             'group_stats': group_stats,
+            'gaps': gaps,
             'message': message,
         }
     except Exception as e:

@@ -11,7 +11,14 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterator, Protocol, runtime_checkable
 
-COLLECTIONS = ("exam_resources", "import_snapshots", "forum_contents", "news_contents")
+COLLECTIONS = (
+    "exam_resources",
+    "import_snapshots",
+    "forum_contents",
+    "news_contents",
+    # 题目/材料文档投影（v6.0 M1）；键形如 q:<question_id> / g:<group_id>
+    "question_documents",
+)
 
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 

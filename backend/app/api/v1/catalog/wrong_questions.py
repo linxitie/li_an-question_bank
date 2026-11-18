@@ -17,14 +17,15 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 
 from ....core.database import get_db, commit_with_retry
 from ....core.security import get_current_user
 from ....models.models import (
     WrongQuestionPersonal, QuestionBank, QuestionSubject, QuestionDetailCategory,
-    QuestionType, QuestionImage, SysUser
+    QuestionType, QuestionImage, QuestionGroup, KnowledgePoint, SysUser
 )
+from ....services import image_markers
 
 router = APIRouter(prefix="/api/wrong-questions", tags=["错题集"])
 logger = logging.getLogger(__name__)
@@ -102,12 +103,24 @@ async def _publish_wrong_reviewed(
 async def get_wrong_questions(
     subject_id: Optional[int] = Query(None, description="科目ID筛选"),
     collection_type: str = Query("WRONG", description="类型: WRONG/FAVORITE/ESSAY"),
+    keyword: str = Query("", description="搜索词：题干/材料/来源模糊匹配"),
+    year: Optional[int] = Query(None, description="年份筛选（题目所属年份）"),
+    source: str = Query("", description="来源筛选（模糊）"),
+    sub_category: str = Query("", description="子科目名筛选（如 基础知识）"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """分页获取用户的错题列表"""
+    """分页获取用户的错题列表
+
+    M5：新增 keyword / year / source / sub_category 四个筛选参数。
+    搜索走 LIKE（本题库「我的错题」单人量级 ≤ 千条，实测 < 50ms），
+    不用 FTS5 的原因：中文需要分词器，而 SQLite 自带 unicode61 不切中文；
+    引入 jieba 建词表会让写入路径多一个必须同步的索引（可重建成本 ≫ 收益）。
+    关键词同时匹配题干与**材料**（复合题的正文常驻 question_groups.shared_content，
+    只搜题干会漏掉申论材料里的关键词）。
+    """
     query = db.query(WrongQuestionPersonal).filter(
         WrongQuestionPersonal.user_id == current_user.user_id,
         WrongQuestionPersonal.collection_type == collection_type,
@@ -116,6 +129,36 @@ async def get_wrong_questions(
 
     if subject_id:
         query = query.filter(WrongQuestionPersonal.subject_id == subject_id)
+
+    kw = (keyword or "").strip()
+    src = (source or "").strip()
+    sc = (sub_category or "").strip()
+    if kw or year or src or sc:
+        q_sub = db.query(QuestionBank.question_id).outerjoin(
+            QuestionGroup, QuestionGroup.id == QuestionBank.group_id
+        )
+        if kw:
+            like = f"%{kw}%"
+            q_sub = q_sub.filter(
+                or_(
+                    QuestionBank.question_content.like(like),
+                    QuestionGroup.shared_content.like(like),
+                    QuestionBank.source.like(like),
+                )
+            )
+        if year:
+            q_sub = q_sub.filter(QuestionBank.year == year)
+        if src:
+            q_sub = q_sub.filter(QuestionBank.source.like(f"%{src}%"))
+        if sc:
+            q_sub = q_sub.filter(
+                or_(
+                    QuestionBank.xingce_subcategory == sc,
+                    QuestionBank.shenlun_subcategory == sc,
+                    QuestionBank.gongzhuan_subcategory == sc,
+                )
+            )
+        query = query.filter(WrongQuestionPersonal.question_id.in_(q_sub))
 
     total = query.count()
     items = query.order_by(desc(WrongQuestionPersonal.add_time))\
@@ -148,6 +191,9 @@ async def get_wrong_questions(
             'subject_id': wq.subject_id,
             'subject_name': subj.subject_name if subj else '',
             'sub_category': sc_name,
+            # M5：年份与来源用于前端筛选栏展示与二次过滤（此前列表未返回）。
+            'year': getattr(q, 'year', None) if q else None,
+            'source': (getattr(q, 'source', '') or '') if q else '',
             'error_count': wq.error_count,
             'mastery_level': wq.mastery_level,
             'is_cut': bool(wq.is_cut),
@@ -298,6 +344,19 @@ async def update_mastery(
 
 
 # === 辅助函数 ===
+
+def _options_text(options) -> str:
+    """把 options 拼成一段纯文本，用于图片标记扫描（选项里也可能带 [IMAGE:…]）。"""
+    if not options:
+        return ''
+    parts = []
+    for opt in options:
+        if isinstance(opt, dict):
+            parts.append(str(opt.get('value') or opt.get('text') or ''))
+        else:
+            parts.append(str(opt))
+    return '\n'.join(parts)
+
 
 def _get_subcategory(question) -> str:
     """根据科目ID返回对应的子科目名称"""
@@ -646,26 +705,78 @@ async def get_wrong_question_detail(
     # 解析用户答案
     user_answer = wq.user_answer or ''
 
-    # 查询题目图片映射（[IMAGE:x_y] → 真实路径）
-    import re as _re_img
-    images = db.query(QuestionImage).filter(
-        QuestionImage.question_id == q.question_id
-    ).all()
-    image_map = {}
-    for img in images:
-        m = _re_img.search(r'img_docx_(\d+)_(\d+)_', img.image_path or '')
-        if m:
-            key = f"{m.group(1)}_{m.group(2)}"
-            image_map[key] = img.image_path
+    # ── M5 断点一：复合题 / 申论材料 ──
+    # 错题详情此前只查 question_bank，申论题的题干只有 39–122 字，材料在
+    # question_groups.shared_content 里（组 22 = 7656 字），完全取不到。
+    # 这里把材料拼在题干前面（阅读顺序与真实试卷一致），并单独返回结构化字段，
+    # 前端不需要改模板也能看到材料；后续要做折叠面板时直接读 group 字段。
+    group = None
+    material = ''
+    if q.group_id:
+        g = db.query(QuestionGroup).filter(QuestionGroup.id == q.group_id).first()
+        if g and (g.shared_content or '').strip():
+            material = g.shared_content
+            group = {
+                'id': g.id,
+                'title': g.title or '',
+                'type': g.group_type or 'material',
+                'content': g.shared_content,
+                'content_length': len(g.shared_content),
+                'source': g.source or '',
+            }
+
+    content = q.question_content or ''
+    if material:
+        content = f"{material}\n\n{content}"
+
+    # ── M5 断点二：图片 ──
+    # 统一用 image_markers 解析（此前用 img_docx_ 正则从 image_path 反推 key，
+    # 真实命名是 /static/questions/{qid}/img_{order}_{hash}.png，永远匹配不到）。
+    point_name = ''
+    if q.point_id:
+        kp = db.query(KnowledgePoint).filter(KnowledgePoint.point_id == q.point_id).first()
+        point_name = kp.point_name if kp else ''
+    image_map = image_markers.build_image_map(
+        content, q.answer_analysis, _options_text(options), question_id=q.question_id, db=db
+    )
+    image_list = image_markers.describe_images(
+        content, q.answer_analysis, _options_text(options), question_id=q.question_id, db=db
+    )
+
+    # ── M5 断点三：解析缺失 ──
+    # 不编造答案：没有官方解析时明确告知，并给出该题考点的要点提纲（来自考点主数据）。
+    analysis = (q.answer_analysis or '').strip()
+    analysis_source = 'official' if analysis else 'missing'
+    if not analysis:
+        hint = f"本题暂无官方解析。建议回到考点「{point_name or '未归类'}」复习要点"
+        if point_name:
+            kp_desc = ''
+            kp_row = db.query(KnowledgePoint).filter(KnowledgePoint.point_id == q.point_id).first()
+            if kp_row is not None:
+                kp_desc = (kp_row.description or '').strip()
+            if kp_desc:
+                hint += f"：{kp_desc}"
+            else:
+                hint += "，并在「练习记录 → 考点进度」中查看该考点的正确率变化。"
+        else:
+            hint += "，先完成一轮同考点练习后再回看。"
+        analysis = hint
 
     return {
         'wrong_id': wq.wrong_id,
         'question_id': q.question_id,
-        'content': q.question_content or '',
+        'content': content,
+        'stem': q.question_content or '',
+        'group': group,
+        'group_id': q.group_id,
+        'point_id': q.point_id,
+        'point_name': point_name,
+        'images': image_list,
         'options': options,
         'correct_answer': q.answer or '',
         'user_answer': user_answer,
-        'analysis': q.answer_analysis or '',
+        'analysis': analysis,
+        'analysis_source': analysis_source,
         'difficulty': q.difficulty or 3,
         'type': unified_type,
         'raw_type': raw_type,

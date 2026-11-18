@@ -19,11 +19,15 @@ KP_QUERY = text(
        FROM knowledge_point
        ORDER BY point_id"""
 )
+# 题目节点口径（v6.0 M1）：凡是有 question_knowledge 链接、或已挂主考点
+# （point_id 非空）的题目都进图。原口径只取 question_knowledge，会把 759 道
+# 只有主考点、没有多考点链接的题漏在图外，导致「按考点看题」在图查询里查不到。
 QUESTION_QUERY = text(
     """SELECT DISTINCT qb.question_id, qb.subject_id, qb.type_id,
-              qb.status, qb.difficulty
-       FROM question_knowledge qk
-       JOIN question_bank qb ON qb.question_id = qk.question_id
+              qb.status, qb.difficulty, qb.point_id
+       FROM question_bank qb
+       LEFT JOIN question_knowledge qk ON qk.question_id = qb.question_id
+       WHERE qk.question_id IS NOT NULL OR qb.point_id IS NOT NULL
        ORDER BY qb.question_id"""
 )
 QK_QUERY = text(
@@ -133,16 +137,35 @@ def build_graph(session, *, limit: int | None = None) -> GraphBuildPlan:
                 props={"derivation": "siblings", "parentId": parent_id},
             ))
     # 3) 题目 -> 知识点；只保留两端都已加载的边。
+    #    先写 question_knowledge 的多考点链接，再补主考点（point_id）边，
+    #    同一 (题, 考点) 只保留一条，避免重复边让图度数翻倍。
+    seen_pairs: set[tuple[int, int]] = set()
     for row in qk_rows:
         question_id = int(row["question_id"])
         point_id = int(row["knowledge_point_id"])
         if question_id not in question_by_id or point_id not in kp_by_id:
             continue
+        if (question_id, point_id) in seen_pairs:
+            continue
+        seen_pairs.add((question_id, point_id))
         edges.append(GraphEdge(
             rel="INSTANCE_OF",
             src_label="Question", src_key=str(question_id),
             dst_label="KnowledgePoint", dst_key=str(point_id),
             props={"derivation": "question_knowledge"},
+        ))
+    for question_id, row in question_by_id.items():
+        primary = row.get("point_id")
+        if not primary or int(primary) not in kp_by_id:
+            continue
+        if (question_id, int(primary)) in seen_pairs:
+            continue
+        seen_pairs.add((question_id, int(primary)))
+        edges.append(GraphEdge(
+            rel="INSTANCE_OF",
+            src_label="Question", src_key=str(question_id),
+            dst_label="KnowledgePoint", dst_key=str(int(primary)),
+            props={"derivation": "question_bank.point_id"},
         ))
     return GraphBuildPlan(nodes=nodes, edges=edges)
 

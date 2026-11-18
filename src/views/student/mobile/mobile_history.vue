@@ -47,7 +47,7 @@
       <div v-for="r in records" :key="r.record_id" class="card" @click="toggleDetail(r.record_id)">
         <div class="r-head">
           <span :class="['r-flag', r.is_correct ? 'ok' : 'err']">{{ r.is_correct ? '✓' : '✗' }}</span>
-          <span class="r-content">{{ r.question_content || '（题目内容）' }}</span>
+          <span class="r-content">{{ renderQuestionSummary(r.question_content) || '（题目内容）' }}</span>
         </div>
         <div class="r-meta">
           <span class="tag">{{ r.source || '练习' }}</span>
@@ -72,6 +72,7 @@ import { useRouter } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import * as echarts from 'echarts';
 import { useRecordsStore } from '@/modules/records/store';
+import { renderQuestionSummary } from '@/utils/questionRender';
 
 const router = useRouter();
 

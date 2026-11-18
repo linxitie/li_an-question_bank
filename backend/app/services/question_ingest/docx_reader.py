@@ -13,6 +13,11 @@ from fastapi import HTTPException
 logger = logging.getLogger(__name__)
 
 
+# 下划线还原统一收口到 docx_underline（v8 M3）：本模块保留同名符号以兼容既有调用方
+from .docx_underline import cell_text as _cell_text_underline  # noqa: F401
+from .docx_underline import paragraph_text_with_underline as paragraph_text_with_underline  # noqa: F401,E402
+from .docx_underline import textbox_texts as _textbox_texts  # noqa: F401
+
 def _rels_base_dir(rels_name: str) -> str:
     """`<dir>/_rels/<name>.rels` → `<dir>/`（关系目标相对于其宿主 part 所在目录）。"""
     d = os.path.dirname(rels_name)          # e.g. word/_rels
@@ -213,7 +218,7 @@ def _extract_text_from_docx(buf: bytes) -> str:
     pending_imgs = []  # 缓冲首题之前或独立图片段的 rId
 
     for para in paragraphs:
-        text = para.text or ''
+        text = paragraph_text_with_underline(para)
         stripped = text.strip()
 
         # 检测题号（search 而非 match，支持段首或段中）
@@ -259,7 +264,7 @@ def _extract_text_from_docx(buf: bytes) -> str:
         for row in table.rows:
             row_texts = []
             for cell in row.cells:
-                ct = cell.text.strip()
+                ct = _cell_text_underline(cell)
                 for cp in cell.paragraphs:
                     for rId in _extract_rids(cp._p):
                         if current_qn is not None:
@@ -276,4 +281,12 @@ def _extract_text_from_docx(buf: bytes) -> str:
             if row_texts:
                 parts.append(' | '.join(row_texts))
 
-    return '\n'.join(parts)
+    # --- 文本框内容（题干/材料被放进文本框的卷子） ---
+    for tb in _textbox_texts(doc):
+        parts.append(tb)
+
+    # 去掉整行噪声（页码/密封线/绝密），但只删「整行就是噪声」的行
+    from .quality import strip_noise_lines
+
+    cleaned = [strip_noise_lines(x) for x in parts]
+    return '\n'.join(x for x in cleaned if x.strip())

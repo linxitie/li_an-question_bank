@@ -81,6 +81,26 @@ class Settings(BaseSettings):
     # 多轮会话携带的最大历史条数
     LLM_MAX_HISTORY: int = Field(10, env="LLM_MAX_HISTORY")
 
+    # ==================== 艾宾浩斯复习（M3）====================
+    # 笔试日期。方案按「次年 1 月第一个周末」推得 2027-01-02（2027 届）；
+    # 官方公告发布后只改这一个值，排程的 D-day 收缩会自动跟着变。
+    EXAM_DATE: str = Field("2027-01-02", env="EXAM_DATE")
+    # 每日复习配额上限（题）。超出部分顺延，防止疲劳导致复习无效。
+    REVIEW_DAILY_MAX: int = Field(60, env="REVIEW_DAILY_MAX")
+    # 站内复习提醒开关。关掉后仍可在错题集手动复习，只是不推送。
+    REVIEW_REMINDER_ENABLED: bool = Field(True, env="REVIEW_REMINDER_ENABLED")
+
+    # 多通道提醒（v9 M4）：站内信之外，追加短信通道。
+    # 默认关闭——短信按条计费，且需要运营商模板报备；配好 transport 再开启即可生效。
+    NOTIFY_SMS_ENABLED: bool = Field(False, env="NOTIFY_SMS_ENABLED")
+    # webhook = 把短信任务 POST 给已对接运营商的自有网关；log = 只写日志（联调/演练）
+    NOTIFY_SMS_TRANSPORT: str = Field("webhook", env="NOTIFY_SMS_TRANSPORT")
+    NOTIFY_SMS_WEBHOOK_URL: str = Field("", env="NOTIFY_SMS_WEBHOOK_URL")
+    NOTIFY_SMS_WEBHOOK_TOKEN: str = Field("", env="NOTIFY_SMS_WEBHOOK_TOKEN")
+    NOTIFY_SMS_SIGN: str = Field("砺安题库", env="NOTIFY_SMS_SIGN")
+    # 每日每人短信上限：提醒是服务不是骚扰，超过就只留站内信
+    NOTIFY_SMS_DAILY_MAX: int = Field(2, env="NOTIFY_SMS_DAILY_MAX")
+
     # 全局限流（每 IP 每分钟请求数）。默认 300 与线上一致；
     # 本机跑 e2e 时请求量会超过它，可在 backend/.env 里调高，避免自己把自己限流。
     RATE_LIMIT_PER_MINUTE: int = Field(300, env="RATE_LIMIT_PER_MINUTE")

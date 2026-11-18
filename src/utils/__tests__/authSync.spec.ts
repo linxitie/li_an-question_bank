@@ -1,5 +1,26 @@
 // @vitest-environment jsdom
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+
+/* Q-94（2026-11-17）：jsdom 下 window.localStorage 可能不可用（clear/setItem 不是函数），
+   导致本文件用例在 beforeEach 阶段就抛 TypeError。这里补一个最小可用实现，
+   仅影响本测试文件，不改产品代码、不改全局配置。 */
+// 注意：jsdom 可能给了一个「存在但方法不全」的 localStorage（clear/setItem 不是函数），
+// 所以这里**无条件**覆盖，而不是只在缺失时才注入 —— 上一版就是栽在这个判断上。
+if (typeof window !== 'undefined') {
+  const __store = new Map<string, string>();
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (k: string) => (__store.has(k) ? __store.get(k)! : null),
+      setItem: (k: string, v: string) => void __store.set(k, String(v)),
+      removeItem: (k: string) => void __store.delete(k),
+      clear: () => __store.clear(),
+      key: (i: number) => Array.from(__store.keys())[i] ?? null,
+      get length() { return __store.size; }
+    }
+  });
+}
+
 import '@/auth';
 
 class FakeSocket {

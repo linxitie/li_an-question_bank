@@ -32,6 +32,10 @@ export interface WrongQuestionItem {
   last_review_time: string | null;
   add_time: string | null;
   note: string | null;
+  /** M5：题目年份（列表接口新增，用于筛选栏展示） */
+  year?: number | null;
+  /** M5：题目来源（如「2024年国考」） */
+  source?: string;
 }
 
 export interface WrongbookListQuery {
@@ -39,6 +43,14 @@ export interface WrongbookListQuery {
   collectionType?: WrongbookCollectionType;
   page?: number;
   pageSize?: number;
+  /** M5：服务端模糊搜索（题干 + 材料 + 来源） */
+  keyword?: string;
+  /** M5：年份筛选 */
+  year?: number | null;
+  /** M5：来源模糊筛选 */
+  source?: string;
+  /** M5：子科目名筛选 */
+  subCategory?: string;
 }
 
 export interface WrongbookListResult {
@@ -52,6 +64,9 @@ export interface WrongbookFilters {
   subjectId?: number | null;
   masteryLevel?: MasteryFilter;
   keyword?: string;
+  year?: number | null;
+  source?: string;
+  subCategory?: string;
 }
 
 export interface WrongbookReviewAnswer {
@@ -114,7 +129,11 @@ export async function fetchWrongbookList(
       page,
       page_size: pageSize,
       subject_id: query.subjectId ?? undefined,
-      collection_type: query.collectionType ?? 'WRONG'
+      collection_type: query.collectionType ?? 'WRONG',
+      keyword: query.keyword?.trim() || undefined,
+      year: query.year ?? undefined,
+      source: query.source?.trim() || undefined,
+      sub_category: query.subCategory?.trim() || undefined
     }
   });
   return {
@@ -232,9 +251,13 @@ export function applyWrongbookFilters(
     if (mastery !== 'all' && item.mastery_level !== mastery) {
       return false;
     }
+    if (filters.year != null && item.year != null && item.year !== filters.year) {
+      return false;
+    }
     if (keyword) {
+      // 本地过滤是服务端搜索的兜底：切换科目 tab 时不再回源，避免闪白。
       const haystack =
-        `${item.question_content} ${item.sub_category ?? ''}`.toLowerCase();
+        `${item.question_content} ${item.sub_category ?? ''} ${item.source ?? ''}`.toLowerCase();
       if (!haystack.includes(keyword)) return false;
     }
     return true;

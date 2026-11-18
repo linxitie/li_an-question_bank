@@ -83,6 +83,12 @@ def read_docx(path: str) -> dict:
     表格里的文字也拼成行（很多题库把选项放两列表格里）。
     """
     from docx import Document
+    # 下划线空白的识别统一收口到 docx_underline（v9 M2）：Word 里「空白 + 下划线格式」
+    # 在 python-docx 里取不到字符，只有 run 的 underline 属性还在，必须按 run 判断才能还原成 ____。
+    from ..question_ingest.docx_underline import (
+        cell_text as _cell_text_underline,
+        paragraph_text_with_underline as _para_text_underline,
+    )
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
@@ -133,7 +139,7 @@ def read_docx(path: str) -> dict:
         tag = getattr(child, "tag", "")
         if tag.endswith("}p"):
             para = Paragraph(child, doc)
-            text = (para.text or "").strip()
+            text = (_para_text_underline(para) or "").strip()
             if text:
                 lines.append(text)
                 no = qno_of(text)
@@ -146,7 +152,7 @@ def read_docx(path: str) -> dict:
             except Exception:                      # noqa: BLE001
                 continue
             for row in table.rows:
-                cells = [(c.text or "").strip() for c in row.cells]
+                cells = [(_cell_text_underline(c) or "").strip() for c in row.cells]
                 joined = "  ".join(c for c in cells if c)
                 if joined:
                     lines.append(joined)

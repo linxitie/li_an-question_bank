@@ -1,4 +1,4 @@
-/*
+﻿/*
  * 砺安题库 - 路由配置（三端分离）
  */
 import {
@@ -7,6 +7,16 @@ import {
   type RouteRecordRaw
 } from 'vue-router';
 import { detectDevice, resolveDevicePath } from '@/utils/device';
+import {
+  deviceOfPathPrefix,
+  devicePathForPcPath,
+  isDeviceAgnosticPath,
+  pcPathForDevicePath,
+  resolveTeacherDevicePath,
+  resolveUiDevice,
+  swapDevicePrefix,
+  unauthorizedReasonForDevice,
+} from './loginPolicy';
 import { reloadForChunkError } from '@/utils/chunkRecovery';
 import { canAccess } from './access';
 
@@ -103,6 +113,20 @@ const routes: RouteRecordRaw[] = [
     path: '/exercise',
     name: 'Exercise',
     component: () => import('@/views/student/shared/exercise.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    // 练习中心（手写页）：统一「快速练习 / 自定义刷题」的考点选择与练习蓝图
+    path: '/practice-center',
+    name: 'PracticeCenter',
+    component: () => import('@/views/student/shared/practice_center.vue'),
+    meta: { roles: ['student', 'teacher', 'admin'] }
+  },
+  {
+    // 收件箱（手写页，v9 M4）：复习提醒/任务/系统通知统一归档，与右下角铃铛共享 /api/notifications
+    path: '/inbox',
+    name: 'Inbox',
+    component: () => import('@/views/student/shared/Inbox.vue'),
     meta: { roles: ['student', 'teacher', 'admin'] }
   },
   {
@@ -250,6 +274,21 @@ const routes: RouteRecordRaw[] = [
     path: '/teacher/questions',
     name: 'TeacherQuestions',
     component: () => import('$vtj/vue/teacher_questions.vue'),
+    meta: { roles: ['teacher', 'admin'] }
+  },
+  {
+    // 考点复核（手写页）：低置信考点分配的人工确认/驳回，写回 point_assign_audit
+    path: '/teacher/point-review',
+    name: 'TeacherPointReview',
+    component: () => import('@/views/teacher/pc/PointReview.vue'),
+    meta: { roles: ['teacher', 'admin'] }
+  },
+  {
+    // 内容修复中心（手写页，v9 M7）：导入后自动体检出的缺口（缺图/缺横线/缺选项/缺答案/缺解析/缺材料），
+    // 按类分组、逐题定位，点「定位题目补录」跳到题目管理并用 ?question_id= 深链打开待修字段。
+    path: '/teacher/content-repair',
+    name: 'TeacherContentRepair',
+    component: () => import('@/views/teacher/pc/ContentRepair.vue'),
     meta: { roles: ['teacher', 'admin'] }
   },
   {
@@ -474,7 +513,37 @@ const routes: RouteRecordRaw[] = [
     path: '/tablet/login',
     name: 'TabletLogin',
     component: () => import('$vtj/vue/tablet_login.vue'),
-    meta: { platform: 'tablet', roles: ['student'] }
+    // 教师也可在平板登录（三端登录方案 P2）：登录页本身对 student/teacher 都放行；
+    // 管理员的拦截不靠 meta.roles（canAccess 对 admin 有 bypass），而在守卫设备分支里显式判。
+    meta: { platform: 'tablet', roles: ['student', 'teacher'] }
+  },
+  {
+    // 教师设备端工作台（P2 落地页，P3/P4 接数据）——同一组件供平板与手机复用（守 R12）
+    path: '/tablet/teacher/home',
+    name: 'TabletTeacherHome',
+    component: () => import('@/views/teacher/shared/TeacherHome.vue'),
+    meta: { platform: 'tablet', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「题目管理」只读列表（P3）；与 /teacher/questions 同一数据源，写操作仍在电脑端
+    path: '/tablet/teacher/questions',
+    name: 'TabletTeacherQuestions',
+    component: () => import('@/views/teacher/shared/TeacherQuestions.vue'),
+    meta: { platform: 'tablet', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「试卷」只读列表（P4）：状态可见，组卷/发布仍在电脑端
+    path: '/tablet/teacher/papers',
+    name: 'TabletTeacherPapers',
+    component: () => import('@/views/teacher/shared/TeacherPapers.vue'),
+    meta: { platform: 'tablet', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「成绩概览」只读（P4，D-21 选①：班级均分/分布/名单）
+    path: '/tablet/teacher/scores',
+    name: 'TabletTeacherScores',
+    component: () => import('@/views/teacher/shared/TeacherScores.vue'),
+    meta: { platform: 'tablet', roles: ['teacher'] }
   },
   // ---- 模块4/7 补齐：平板端复用同一组件（R12）----
   {
@@ -674,7 +743,36 @@ const routes: RouteRecordRaw[] = [
     path: '/mobile/login',
     name: 'MobileLogin',
     component: () => import('$vtj/vue/mobile_login.vue'),
-    meta: { platform: 'mobile', roles: ['student'] }
+    // 教师也可在手机登录（三端登录方案 P2）；管理员拦截在守卫设备分支里显式判。
+    meta: { platform: 'mobile', roles: ['student', 'teacher'] }
+  },
+  {
+    // 教师设备端工作台（P2 落地页）——与平板共用同一组件（守 R12）
+    path: '/mobile/teacher/home',
+    name: 'MobileTeacherHome',
+    component: () => import('@/views/teacher/shared/TeacherHome.vue'),
+    meta: { platform: 'mobile', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「题目管理」只读列表（P3）——与平板共用同一组件（守 R12）
+    path: '/mobile/teacher/questions',
+    name: 'MobileTeacherQuestions',
+    component: () => import('@/views/teacher/shared/TeacherQuestions.vue'),
+    meta: { platform: 'mobile', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「试卷」只读列表（P4）——与平板共用同一组件（守 R12）
+    path: '/mobile/teacher/papers',
+    name: 'MobileTeacherPapers',
+    component: () => import('@/views/teacher/shared/TeacherPapers.vue'),
+    meta: { platform: 'mobile', roles: ['teacher'] }
+  },
+  {
+    // 教师设备端「成绩概览」只读（P4）——与平板共用同一组件（守 R12）
+    path: '/mobile/teacher/scores',
+    name: 'MobileTeacherScores',
+    component: () => import('@/views/teacher/shared/TeacherScores.vue'),
+    meta: { platform: 'mobile', roles: ['teacher'] }
   },
   {
     path: '/mobile/scan',
@@ -948,20 +1046,66 @@ function resolveContentDevicePath(
   return null;
 }
 
-router.beforeEach((to, _from, next) => {
-  const detected = detectDevice();
-  // 兼容手机浏览器的“桌面模式”/旧 WebView：UA 被判为 pc 时，仍按视口宽度回到移动布局
-  const device: 'pc' | 'mobile' | 'tablet' =
-    detected === 'pc' && window.innerWidth <= 1024
-      ? window.innerWidth >= 768
-        ? 'tablet'
-        : 'mobile'
-      : detected;
+/**
+ * 已注册的路由路径集合（懒构建，只算一次）。
+ *
+ * 为什么要它：D-28 的「平板 ↔ 手机换前缀」可能指向不存在的路由
+ * （例如 /tablet/x 在手机端没有 /mobile/x），必须落地前先验存在，
+ * 否则会静默停在空白页 —— 这正是历史上的「手机端不生效」根因之一。
+ */
+let knownRoutePaths: Set<string> | null = null;
+function routePathExists(path: string): boolean {
+  if (!knownRoutePaths) {
+    knownRoutePaths = new Set(router.getRoutes().map((r) => r.path));
+  }
+  return knownRoutePaths.has(path);
+}
 
-  // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再验角色
-  //    - 未登录：只放行各端登录页，其余跳转到对应端登录页并带 redirect
-  //      （此前这里直接 `next()`，导致 /mobile/* 未登录也能进——已修）
-  //    - 教师/管理员：跳 /unauthorized
+router.beforeEach((to, _from, next) => {
+  // 设备裁决（D-39，2026-11-17）：detectDevice() 只看 UA / 宽度 / 触摸点数，
+  // 会把「882px 宽的普通电脑窗口」降级成平板/手机（实测踩过）。
+  // 这里叠加指针类型再裁决一次，口径见 loginPolicy.resolveUiDevice。
+  const mq = (q: string) =>
+    typeof window.matchMedia === 'function' ? window.matchMedia(q).matches : false;
+  const device: 'pc' | 'mobile' | 'tablet' = resolveUiDevice({
+    detected: detectDevice(),
+    innerWidth: window.innerWidth,
+    coarsePointer: mq('(pointer: coarse)'),
+    finePointer: mq('(any-pointer: fine)')
+  });
+
+  // 0) 设备 × 界面一致性（D-28，2026-11-16）
+  //    实测缺陷：电脑打开 /#/tablet/home、/#/mobile/teacher/papers 会**直接渲染平板/手机界面**；
+  //    手机/平板打开 /#/teacher/dashboard 会**直接渲染电脑版教师端**。
+  //    这里在进入任何分支前先纠正「路由前缀 ≠ 本机设备」的情况：
+  //      · 电脑 → 设备端路径：回到电脑端等价页（无等价 → '/'）
+  //      · 平板 ↔ 手机互串：换前缀（目标路由不存在 → 该端首页）
+  //    注意：/unauthorized、/login、/help、/materials-preview、/about 是设备无关页，不参与纠正。
+  if (!isDeviceAgnosticPath(to.path)) {
+    const pathPrefix = deviceOfPathPrefix(to.path);
+    const expectedPrefix: 'tablet' | 'mobile' | null =
+      device === 'tablet' ? 'tablet' : device === 'mobile' ? 'mobile' : null;
+    if (pathPrefix && pathPrefix !== expectedPrefix) {
+      if (!expectedPrefix) {
+        const pcPath = pcPathForDevicePath(to.path);
+        return next({ path: pcPath || '/', replace: true });
+      }
+      const swapped = swapDevicePrefix(to.path, expectedPrefix);
+      if (swapped && routePathExists(swapped)) {
+        return next({ path: swapped, replace: true });
+      }
+      return next({ path: `/${expectedPrefix}/home`, replace: true });
+    }
+  }
+
+  // 1) 已在设备专属路径（/tablet、/mobile）→ 先验登录，再按「角色 × 端」矩阵判定
+  //    矩阵口径见 src/router/loginPolicy.ts（镜像后端 app/core/device_policy.py）：
+  //      · student / teacher 三端可用；
+  //      · admin 仅电脑端 —— **必须在这里显式拦**：
+  //        canAccess() 对 admin 有 bypass（src/router/access.ts），靠 meta.roles 拦不住管理员。
+  //    - 未登录：只放行各端登录页，其余跳对应端登录页并带 redirect
+  //    - 教师：设备端放行；访问「学生首页」时改投教师设备端首页
+  //    - 管理员：跳 /unauthorized?reason=admin_pc_only
   if (to.path.startsWith('/tablet') || to.path.startsWith('/mobile')) {
     const auth = (window as any).__VTJ_AUTH__;
     const logged =
@@ -978,10 +1122,26 @@ router.beforeEach((to, _from, next) => {
         : '/mobile/login';
       return next({ path: loginPath, query: { redirect: to.fullPath } });
     }
+
     const role = auth ? auth.getUserRole() : null;
-    if (role && role !== 'student') {
-      return next('/unauthorized?reason=mobile_student_only');
+    const prefix = deviceOfPathPrefix(to.path) || 'tablet';
+
+    // 管理员：设备端一律拒绝（需求「管理员必须为电脑」）
+    const denyReason = unauthorizedReasonForDevice(role);
+    if (denyReason) {
+      return next(`/unauthorized?reason=${denyReason}`);
     }
+
+    // 教师：设备端放行；只把「学生首页」改投教师设备端首页，其余页面照常
+    if (role === 'teacher') {
+      const teacherTarget = resolveTeacherDevicePath(to.path, prefix);
+      if (teacherTarget && teacherTarget !== to.path) {
+        return next({ path: teacherTarget, replace: true });
+      }
+      return next();
+    }
+
+    // 学生：既有权限校验不变
     if (role) {
       const permissions = auth?.getPermissions ? auth.getPermissions() : [];
       if (!canAccess(to.meta as any, role, permissions)) {
@@ -1001,6 +1161,12 @@ router.beforeEach((to, _from, next) => {
     const target = resolveDevicePath(to.path, device);
     if (target) {
       return next({ path: target, replace: true });
+    }
+    // D-28：教师端/题目导入等电脑端页面在设备端没有实现 → 改投设备端对应页，
+    // 否则手机会渲染整套电脑版界面（实测缺陷）。
+    const teacherTarget = devicePathForPcPath(to.path, device);
+    if (teacherTarget && routePathExists(teacherTarget)) {
+      return next({ path: teacherTarget, replace: true });
     }
   }
 
@@ -1063,3 +1229,4 @@ router.beforeEach((to, _from, next) => {
 });
 
 export default router;
+

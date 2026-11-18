@@ -1,5 +1,6 @@
 import { createViteConfig } from '@vtj/cli';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createDevTools } from '@vtj/pro/vite';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,9 +26,24 @@ function resolveBuildSha(): string {
   }
 }
 
+const workspaceRoot = dirname(fileURLToPath(import.meta.url));
 const BUILD_SHA = resolveBuildSha();
 const BUILD_TIME = new Date().toISOString();
-const workspaceRoot = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * 应用版本号唯一来源 = 仓库根 VERSION 文件。
+ * 为什么不再各自硬编码：前端角标显示构建 SHA、后端显示启动时 git SHA，
+ * 两串字面永不相同，用户只能读成「版本不一致」（2026-11-14 实拍 c4639296 · f88b771）。
+ * 版本号全局只能有一处来源，前后端读同一个文件；SHA 降级为排查细节，放进 tooltip。
+ */
+function resolveAppVersion(): string {
+  try {
+    return readFileSync(resolve(workspaceRoot, 'VERSION'), 'utf8').trim() || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+const APP_VERSION = resolveAppVersion();
 
 function samePath(left: string, right: string): boolean {
   const normalize = (value: string) => resolve(value).toLowerCase();
@@ -57,12 +73,17 @@ function buildStamp(): Plugin {
     name: 'build-stamp',
     enforce: 'pre',
     transform(code) {
-      if (!code.includes('__BUILD_SHA__') && !code.includes('__BUILD_TIME__')) {
+      if (
+        !code.includes('__BUILD_SHA__') &&
+        !code.includes('__BUILD_TIME__') &&
+        !code.includes('__APP_VERSION__')
+      ) {
         return null;
       }
       return code
         .replace(/__BUILD_SHA__/g, JSON.stringify(BUILD_SHA))
-        .replace(/__BUILD_TIME__/g, JSON.stringify(BUILD_TIME));
+        .replace(/__BUILD_TIME__/g, JSON.stringify(BUILD_TIME))
+        .replace(/__APP_VERSION__/g, JSON.stringify(APP_VERSION));
     },
   };
 }

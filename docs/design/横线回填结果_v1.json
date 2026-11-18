@@ -1,0 +1,130 @@
+{
+  "generated_at": "2026-11-14T21:28:42",
+  "applied": false,
+  "results": [
+    {
+      "qid": 2661,
+      "status": "context_not_unique",
+      "fragment": "把人民群众 ，作为",
+      "count": 0
+    },
+    {
+      "qid": 2689,
+      "status": "context_not_unique",
+      "fragment": "按照 的总要求",
+      "count": 0
+    },
+    {
+      "qid": 3666,
+      "status": "context_not_unique",
+      "fragment": "在岗位上 的写照",
+      "count": 0
+    },
+    {
+      "qid": 3667,
+      "status": "context_not_unique",
+      "fragment": "精神秩序的 。",
+      "count": 0
+    },
+    {
+      "qid": 3668,
+      "status": "context_not_unique",
+      "fragment": "特点 出来",
+      "count": 0
+    },
+    {
+      "qid": 3669,
+      "status": "context_not_unique",
+      "fragment": "科技赋能下的 、",
+      "count": 0
+    },
+    {
+      "qid": 3670,
+      "status": "context_not_unique",
+      "fragment": "47米。 ，沙珠玉人",
+      "count": 0
+    },
+    {
+      "qid": 3671,
+      "status": "context_not_unique",
+      "fragment": "都有着 的闪光点",
+      "count": 0
+    },
+    {
+      "qid": 3672,
+      "status": "context_not_unique",
+      "fragment": "之中是 的。",
+      "count": 0
+    },
+    {
+      "qid": 3673,
+      "status": "context_not_unique",
+      "fragment": "老字号所 的独特",
+      "count": 0
+    },
+    {
+      "qid": 3674,
+      "status": "context_not_unique",
+      "fragment": "诗坛尽管 ，",
+      "count": 0
+    },
+    {
+      "qid": 3675,
+      "status": "context_not_unique",
+      "fragment": "时代的 ，",
+      "count": 0
+    },
+    {
+      "qid": 3676,
+      "status": "context_not_unique",
+      "fragment": "······ ，成为我国",
+      "count": 0
+    },
+    {
+      "qid": 3798,
+      "status": "context_not_unique",
+      "fragment": "航空成就， 出",
+      "count": 0
+    },
+    {
+      "qid": 3799,
+      "status": "context_not_unique",
+      "fragment": "大多 ，彰显",
+      "count": 0
+    },
+    {
+      "qid": 3808,
+      "status": "context_not_unique",
+      "fragment": "可见， ，在蝶类",
+      "count": 0
+    },
+    {
+      "qid": 3809,
+      "status": "context_not_unique",
+      "fragment": "叙事过程， 。",
+      "count": 0
+    },
+    {
+      "qid": 3921,
+      "status": "context_not_unique",
+      "fragment": "重要性 。",
+      "count": 0
+    },
+    {
+      "qid": 3922,
+      "status": "context_not_unique",
+      "fragment": "后者 ，对于",
+      "count": 0
+    },
+    {
+      "group_id": 51,
+      "status": "context_not_unique",
+      "fragment": "想它。” 。人们",
+      "count": 0
+    }
+  ],
+  "skipped": {
+    "3800": "「研究 地均居于」语义不通，横线原文可能吞掉了「地位」，需核对原始 PDF/docx",
+    "4214": "划线对象是整句（下列与画横线部分意思相符），文中无空位可插入 ____"
+  }
+}
