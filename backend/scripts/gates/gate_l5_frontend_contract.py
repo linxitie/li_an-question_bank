@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """L5 前端数据契约门禁 — 必需标识符 + RC-2 反向守卫"""
 import os, sys, re
 

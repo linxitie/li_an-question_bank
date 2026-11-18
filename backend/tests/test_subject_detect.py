@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """S2 回归：科目识别器（口径 Q-57 c：标题优先、弱特征严格、不确定返回 None）。"""
 from app.core.subject_detect import detect_subject, score_text, title_scores
 

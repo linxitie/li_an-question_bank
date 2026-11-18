@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """L1（2026-11-08）：投放位 placement 的回归。
 
 覆盖：

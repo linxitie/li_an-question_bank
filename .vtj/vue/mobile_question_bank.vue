@@ -138,8 +138,7 @@ import {
   Calendar,
   Clock,
   Warning,
-  Trophy,
-  Calendar
+  Trophy
 } from '@vtj/icons';
 import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
 import { useProvider } from '@vtj/renderer';

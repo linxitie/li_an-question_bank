@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """verify_taxonomy_v2.py — 知识点分类 V2 迁移验收校验（只读，stdlib only）。
 

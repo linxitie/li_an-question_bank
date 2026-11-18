@@ -1,4 +1,4 @@
-﻿"""快速练习题目列表：bySubCategory 直查 question_bank 与返回字段一致性。"""
+"""快速练习题目列表：bySubCategory 直查 question_bank 与返回字段一致性。"""
 from app.models.models import (
     KnowledgePoint,
     QuestionBank,
