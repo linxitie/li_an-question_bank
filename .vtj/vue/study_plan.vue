@@ -487,8 +487,33 @@
           if (res.ok) {
             state.today = await res.json();
             state.error = '';
+            // 2026-11-15：已完成但金币没到账（历史数据/上次请求中断）时兜底补发
+            await settlePendingGoalCoins();
           }
         } catch (e) { /* 今日面板加载失败不影响主流程 */ }
+      }
+
+      /**
+       * 计划任务金币兜底（2026-11-15，与 badge_task 的 /api/tasks/auto-claim 同一通道）。
+       * 只在「已完成且未到账」时调一次，接口本身幂等，失败不打扰用户。
+       */
+      async function settlePendingGoalCoins() {
+        const tasks = (state.today && state.today.tasks) || [];
+        const pending = tasks.filter(
+          (t) => t.is_completed === 1 && t.coin_claimed === 0 && (t.coin_reward || 0) > 0
+        );
+        if (!pending.length) return;
+        try {
+          const r = await window.__VTJ_AUTH__.apiFetch('/api/tasks/auto-claim', { method: 'POST' });
+          if (!r.ok) return;
+          const data = await r.json().catch(() => ({}));
+          const mine = (data.granted || []).filter((g) => g && g.source === 'study_goal');
+          if (!mine.length) return;
+          const coins = mine.reduce((sum, g) => sum + (g.reward_coins || 0), 0);
+          if (coins > 0) state.coinNotice = `已自动到账 ${coins} 金币`;
+          const again = await window.__VTJ_AUTH__.apiFetch('/api/plan/today');
+          if (again.ok) state.today = await again.json();
+        } catch (e) { /* 兜底失败不影响今日面板 */ }
       }
 
       async function toggleTask(t) {
@@ -500,11 +525,19 @@
         try {
           const res = await window.__VTJ_AUTH__.apiFetch(`/api/plan/task/${t.goal_id}/toggle`, { method: 'POST' });
           if (res.ok) {
-            t.is_completed = t.is_completed === 1 ? 0 : 1;
+            const data = await res.json().catch(() => ({}));
+            t.is_completed = typeof data.is_completed === 'number'
+              ? data.is_completed
+              : (t.is_completed === 1 ? 0 : 1);
             const total = state.plan.tasks.length;
             const done = state.plan.tasks.filter(x => x.is_completed === 1).length;
             state.plan.progress.done = done;
             state.plan.progress.percent = Math.round(done / total * 100);
+            // 2026-11-15：完成即自动到账，不再需要额外点「领取」
+            if (data && data.auto_claimed_coins > 0) {
+              t.coin_claimed = 1;
+              state.coinNotice = `任务完成，自动到账 +${data.auto_claimed_coins} 金币`;
+            }
             state.error = '';
           } else {
             const data = await res.json().catch(() => ({}));

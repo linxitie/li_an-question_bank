@@ -29,6 +29,11 @@ os.environ.setdefault("MATERIAL_FILES_DIR", _TEST_FILES_ROOT)
 # （IMPORT_INLINE=1），否则几百个老用例都要改成"上传后轮询"；异步路径由
 # tests/test_import_async_o5.py 用 monkeypatch 单独覆盖。
 os.environ.setdefault("IMPORT_INLINE", "1")
+# 2026-11-18：测试默认禁用 BiRefNet（单次推理 5~15s，且有 973MB 权重依赖），
+# 抠像引擎的分支逻辑由 tests/test_product_image_birefnet.py 用替身单独覆盖。
+os.environ.setdefault("SHOP_CUTOUT_ENGINE", "classic")
+# 抠像默认同步：异步队列由 tests/test_product_image_async.py 显式打开（避免后台线程影响其他用例）
+os.environ.setdefault("SHOP_CUTOUT_ASYNC", "0")
 # StaticFiles 挂载要求目录已存在（main.py 里 mount /uploads），否则 import 阶段直接抛 RuntimeError
 os.makedirs(_TEST_UPLOAD_ROOT, exist_ok=True)
 os.makedirs(_TEST_FILES_ROOT, exist_ok=True)

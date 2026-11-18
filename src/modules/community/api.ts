@@ -23,7 +23,7 @@ export type ForumReactionCode = 'like' | 'love' | 'haha' | 'wow' | 'sad' | 'angr
 
 export type ForumSortOrder = 'asc' | 'desc';
 
-export type ForumPostSortBy = 'time' | 'likes' | 'comments' | 'views';
+export type ForumPostSortBy = 'time' | 'likes' | 'comments' | 'views' | 'favorites' | 'replies';
 
 export type ForumCommentSortBy = 'time' | 'likes' | 'replies';
 
@@ -61,6 +61,8 @@ export interface ForumPostItem {
   tags?: string[];
   attachments?: ForumAttachment[];
   isTop?: boolean;
+  /** 置顶到期时间（2026-11-15）：null/缺省 = 永久，卡片用它算倒计时 */
+  pinUntil?: string | null;
   isEssence?: boolean;
   isLocked?: boolean;
   titleColor?: string;

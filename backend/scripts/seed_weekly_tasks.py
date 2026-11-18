@@ -27,14 +27,16 @@ from app.models.models import Task  # noqa: E402
 TASKS = [
     # (code, title, desc, metric, threshold, base, difficulty, category, coupon, sort, pin_eligible)
     # 前 3 个设为可置顶（设计文档 §3.3 中的置顶样例）
-    ("wk_questions_300", "本周完成 300 道题", "累计刷题 300 道", "week_questions", 300, 120, 1.6, "A", None, 1, 1),
-    ("wk_exam_3", "本周完成 3 套真题", "完整做完并提交 3 套试卷", "week_exam_papers", 3, 110, 1.4, "A", None, 2, 1),
-    ("wk_active_5", "本周 5 天有刷题记录", "本周至少 5 天保持练习", "week_active_days", 5, 90, 1.2, "B", None, 3, 1),
-    ("wk_accuracy_80", "本周正确率 ≥80%", "本周答题正确率达到 80%", "week_accuracy", 80, 130, 1.6, "A", None, 4, 0),
-    ("wk_daily_7", "本周 7 天每日≥10 题", "连续型：每天至少 10 题的打卡节奏", "week_daily_practice_days", 7, 120, 1.4, "B", None, 5, 0),
-    ("wk_questions_150", "本周完成 150 道题", "入门档刷题目标", "week_questions", 150, 90, 1.2, "A", None, 6, 0),
-    ("wk_exam_2_coupon", "完成 2 套真题 → 月卡 8 折券", "完成 2 套真题解锁题库月卡 8 折券", "week_exam_papers", 2, 70, 1.0, "C", "MONTH_CARD_20OFF", 7, 0),
-    ("wk_accuracy_85_coupon", "本周正确率 ≥85% → 文具 9 折券", "正确率达标解锁文具套装 9 折券", "week_accuracy", 85, 70, 1.1, "C", "STATIONERY_10OFF", 8, 0),
+    # 2026-11-17：基础金币统一下调（原 120/110/90/130/120/90/70/70 → 45/40/35）。
+    # 生效值 = 基础 × 难度 × 稀缺（置顶 1.30/1.45/1.50），目标区间 30~72，避免碾压日任务（10~40）。
+    ("wk_questions_300", "本周完成 300 道题", "累计刷题 300 道", "week_questions", 300, 45, 1.6, "A", None, 1, 1),
+    ("wk_exam_3", "本周完成 3 套真题", "完整做完并提交 3 套试卷", "week_exam_papers", 3, 40, 1.4, "A", None, 2, 1),
+    ("wk_active_5", "本周 5 天有刷题记录", "本周至少 5 天保持练习", "week_active_days", 5, 35, 1.2, "B", None, 3, 1),
+    ("wk_accuracy_80", "本周正确率 ≥80%", "本周答题正确率达到 80%", "week_accuracy", 80, 45, 1.6, "A", None, 4, 0),
+    ("wk_daily_7", "本周 7 天每日≥10 题", "连续型：每天至少 10 题的打卡节奏", "week_daily_practice_days", 7, 40, 1.4, "B", None, 5, 0),
+    ("wk_questions_150", "本周完成 150 道题", "入门档刷题目标", "week_questions", 150, 35, 1.2, "A", None, 6, 0),
+    ("wk_exam_2_coupon", "完成 2 套真题 → 月卡 8 折券", "完成 2 套真题解锁题库月卡 8 折券", "week_exam_papers", 2, 30, 1.0, "C", "MONTH_CARD_20OFF", 7, 0),
+    ("wk_accuracy_85_coupon", "本周正确率 ≥85% → 文具 9 折券", "正确率达标解锁文具套装 9 折券", "week_accuracy", 85, 30, 1.1, "C", "STATIONERY_10OFF", 8, 0),
 ]
 
 
@@ -48,6 +50,7 @@ def main() -> None:
                 changed = False
                 for field, value in (
                     ("t_type", "weekly"),
+                    ("reward_coins", base),  # 2026-11-17：奖励调整后重跑本脚本也会同步
                     ("metric", metric),
                     ("threshold", threshold),
                     ("difficulty_factor", difficulty),

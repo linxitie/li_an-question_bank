@@ -238,6 +238,27 @@ def init_scheduler():
         replace_existing=True,
     )
 
+    # 2026-11-18：知识图谱 Obsidian 自生长库每日刷新（07:10，避开 07:00 金句采集）
+    def _refresh_kg_vault():
+        try:
+            from app.services import kg_vault_export
+
+            result = kg_vault_export.export_vault()
+            logger.info(
+                "知识图谱 Obsidian 刷新完成: users=%s notes=%s",
+                result.get("users"), result.get("notes"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("知识图谱 Obsidian 刷新失败: %s", exc)
+
+    scheduler.add_job(
+        _refresh_kg_vault,
+        trigger=CronTrigger(hour=7, minute=10, timezone=CST),
+        id="refresh_kg_vault",
+        name="知识图谱 Obsidian 每日刷新 07:10",
+        replace_existing=True,
+    )
+
     # 每日 02:00（北京时间）执行 IRT 难度更新（在爬取完成后，避开高峰期）
     scheduler.add_job(
         update_all_difficulties,

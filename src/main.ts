@@ -29,6 +29,7 @@ import { installMaterialsCreateEntry } from './utils/materialsCreateEntry';  // 
 import { installTabletMaterialsEntry } from './utils/tabletMaterialsEntry';  // 平板首页「备考资料」入口（DOM 注入）
 import { installAdminMaterialTypes } from './utils/adminMaterialTypes';  // 管理页「讲义/试卷」类型与统计卡（DOM 注入，A4 后删除）
 import { installAdminImportTypeFix } from './utils/adminImportTypeFix';  // 旧版导入向导：文档默认「作为讲义」（B3，B2 后删除）
+import { installA11yFormFields } from './utils/a11yFormFields';  // 表单元素补 id/name（.vtj 模板不能改，走 DOM 注入）
 
 // 注册全局图片重试函数（第9层防线）
 registerImageRetry();
@@ -143,6 +144,8 @@ onReady(async () => {
   installAdminMaterialTypes();
   // 旧版资料页的导入向导：文档类默认「作为讲义」（B3 修复 P1；B2 重建向导后删除）
   installAdminImportTypeFix();
+  // Chrome Issues「表单字段缺 id/name」兜底：VTJ 页模板不能改，运行时补（只补缺失的）
+  installA11yFormFields();
 });
 
 if (process.env.NODE_ENV === 'production') {

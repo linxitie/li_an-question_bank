@@ -183,7 +183,7 @@
                 <div class="cell-post">
                   <div class="t">
                     <a class="ttl" @click="openDrawer(p)">{{ p.title || '（无标题）' }}</a>
-                    <span v-if="p.isTop" class="pill pin"><i></i>置顶</span>
+                    <span v-if="p.isTop" class="pill pin" :title="pinTitle(p.pinUntil)"><i></i>置顶 {{ pinCountdown(p.pinUntil) }}</span>
                     <span v-if="p.isEssence" class="pill essence"><i></i>精华</span>
                   </div>
                   <div class="e content-clip">{{ snippet(contentWithoutStickers(p.content), 90) }}</div>
@@ -212,6 +212,8 @@
               <td class="nowrap"><span class="muted mono">{{ fmtTime(p.createTime) }}</span></td>
               <td>
                 <div class="acts">
+                  <button v-if="p.isTop" class="lnk strong" @click.stop="openPinModal(p)">取消置顶</button>
+                  <button v-else-if="p.status === 'NORMAL'" class="lnk" @click.stop="openPinModal(p)">置顶</button>
                   <button v-if="p.status === 'NORMAL'" class="lnk warn" @click="askAction('hide', p)">隐藏</button>
                   <button v-else-if="p.status === 'BLOCKED'" class="lnk strong" @click="askAction('unhide', p)">取消隐藏</button>
                   <button v-else class="lnk strong" @click="askAction('restore', p)">恢复</button>
@@ -382,7 +384,7 @@
             <div class="post-title">
               <span v-if="activePost.aiTitle" class="ai-title-tag">AI生成</span>{{ activePost.title || '（无标题）' }}
               <span :class="['pill', statusClass(activePost.status)]"><i></i>{{ statusText(activePost.status) }}</span>
-              <span v-if="activePost.isTop" class="pill pin"><i></i>置顶<template v-if="activePost.pinUntil"> 至 {{ activePost.pinUntil.slice(0, 10) }}</template></span>
+              <span v-if="activePost.isTop" class="pill pin" :title="pinTitle(activePost.pinUntil)"><i></i>置顶 {{ pinCountdown(activePost.pinUntil) }}</span>
               <span v-if="activePost.isEssence" class="pill essence"><i></i>精华</span>
             </div>
             <!-- 富文本帖子（contentFormat=HTML）不能再去表情包占位符后当纯文本渲染，否则标签会显示出来 -->
@@ -414,7 +416,7 @@
             </div>
             <div v-if="activePost.status !== 'DELETED'" class="post-admin">
               <span class="lbl">管理操作</span>
-              <button class="btn btn-sm" @click="openPinModal">
+              <button class="btn btn-sm" @click="openPinModal()">
                 {{ activePost.isTop ? '取消置顶' : '置顶' }}
               </button>
               <button v-if="activePost.status === 'BLOCKED'" class="btn btn-sm" @click="askAction('unhide', activePost)">
@@ -625,6 +627,7 @@ import { ElMessage } from 'element-plus';
 import { XChart } from '@vtj/charts';
 
 import PostComposer, { type PostDraft } from '@/components/forum/PostComposer.vue';
+import { pinCountdown, pinTitle } from '@/components/forum/pinCountdown';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import ImageGrid from '@/components/forum/ImageGrid.vue';
@@ -1191,7 +1194,7 @@ async function publishPost(payload: PostDraft) {
     });
     // create_post 不接受 is_top，置顶走既有置顶接口，避免再改发帖契约
     if (payload.isTop && created?.id) {
-      await adminForumApi.pinPost(created.id, true);
+      await adminForumApi.pinPost(created.id, true, payload.pinDays ?? 7);
     }
     composerOpen.value = false;
     showToast('发布成功');
@@ -1456,9 +1459,14 @@ const pinOptions = [
   { value: 0, label: '永久' }
 ];
 
-function openPinModal() {
-  if (!activePost.value) return;
-  if (activePost.value.isTop) {
+/** 当前要置顶的帖子：列表行传 p，抽屉传空（用 activePost） */
+const pinTarget = ref<ModerationPost | null>(null);
+
+function openPinModal(post?: ModerationPost) {
+  const target = post ?? activePost.value;
+  if (!target) return;
+  pinTarget.value = target;
+  if (target.isTop) {
     void togglePin(false);
     return;
   }
@@ -1477,17 +1485,27 @@ async function submitPin() {
 }
 
 async function togglePin(next: boolean, days?: number) {
-  if (!activePost.value) return false;
+  const target = pinTarget.value ?? activePost.value;
+  if (!target) return false;
   try {
-    const res = await adminForumApi.pinPost(activePost.value.id, next, days);
+    const res = await adminForumApi.pinPost(target.id, next, days);
     showToast(
       next ? (days && days > 0 ? `已置顶 ${days} 天` : '已永久置顶') : '已取消置顶'
     );
-    activePost.value = {
-      ...activePost.value,
-      isTop: next,
-      pinUntil: res?.pinUntil ?? null
-    };
+    // 列表行 + 抽屉同时更新，避免要刷新才看到倒计时变化
+    const row = posts.value.find((item) => item.id === target.id);
+    if (row) {
+      row.isTop = next;
+      row.pinUntil = res?.pinUntil ?? null;
+    }
+    if (activePost.value && activePost.value.id === target.id) {
+      activePost.value = {
+        ...activePost.value,
+        isTop: next,
+        pinUntil: res?.pinUntil ?? null
+      };
+    }
+    pinTarget.value = null;
     await loadPosts();
     return true;
   } catch (e: any) {

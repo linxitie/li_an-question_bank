@@ -1006,6 +1006,19 @@ async def lifespan(app: FastAPI):
         consumer_task = _consumer_asyncio.create_task(consume_user_actions())
         logger.info("事件消费者已启动")
 
+    # 2026-11-18：商品图 BiRefNet 抠图模型后台预热（首次加载 ONNX 会话约 5~50s，
+    # 放到后台线程，避免管理员第一次上传商品图时卡在半分钟以上）。pytest 下跳过。
+    try:
+        import sys as _sys
+
+        if "pytest" not in _sys.modules:
+            from .services import product_image as _product_image
+
+            _product_image.warmup_background()
+            logger.info("商品图抠像引擎: %s", _product_image.cutout_engine())
+    except Exception as e:
+        logger.warning(f"商品图抠像模型预热启动失败（不影响服务）: {e}")
+
     yield
 
     logger.info("关闭公安联考题库系统服务...")

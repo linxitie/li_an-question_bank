@@ -465,5 +465,26 @@ async def admin_upload_product_image(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    logger.info("管理员 %s 上传商品图 %s", current_user.username, result["url"])
+    logger.info(
+        "管理员 %s 上传商品图 %s（engine=%s）",
+        current_user.username, result["url"], result.get("engine"),
+    )
     return {"success": True, **result}
+
+
+@router.get("/upload-image/{name}/status", summary="商品图异步抠像状态")
+async def admin_upload_image_status(
+    name: str,
+    current_user: SysUser = Depends(get_current_admin),
+):
+    """异步抠像进度：queued / running / done / failed。
+
+    前端上传后拿到 status_url 轮询；done 时把 image_url 加个时间戳即可拿到最终图
+    （同一个文件名，后台处理完直接覆盖）。
+    """
+    if "/" in name or "\\" in name or not name.endswith(".png"):
+        raise HTTPException(status_code=400, detail="非法文件名")
+    job = product_image.image_job_status(name)
+    if not job:
+        raise HTTPException(status_code=404, detail="任务不存在（服务重启后状态会丢失）")
+    return {"success": True, "name": name, **job}

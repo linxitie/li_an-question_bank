@@ -199,7 +199,19 @@
         this.state.records = this.rewardStore.records;
       },
       async loadTasks() {
-        try { const r = await window.__VTJ_AUTH__.apiFetch('/api/tasks/overview'); const d = await r.json(); if (r.ok) this.state.tasks = d; } catch (e) {}
+        try {
+          const r = await window.__VTJ_AUTH__.apiFetch('/api/tasks/overview');
+          const d = await r.json();
+          if (r.ok) {
+            // 2026-11-17：知识图谱生成的周任务在标题前注明（.vtj 模板按 R3 不能改，改数据不碰模板）
+            (d.weekly || []).forEach((t: any) => {
+              if (t && t.is_kg_generated && !String(t.title).startsWith('【知识图谱生成】')) {
+                t.title = '【知识图谱生成】' + t.title;
+              }
+            });
+            this.state.tasks = d;
+          }
+        } catch (e) {}
       },
       async claimTask(t) {
         try {
@@ -299,12 +311,17 @@
 </script>
 
 <style lang="css" scoped>
-  .mobile-gp-page { min-height: 100vh; background: #f4f6fa; padding: 12px 12px 60px; font-family: 'Noto Sans SC', sans-serif; }
-  .gp-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px 12px; }
-  .gp-title { font-size: 18px; font-weight: 800; color: #1a2b5f; }
-  .gold-balance { background: #fef3c7; padding: 8px 16px; border-radius: 14px; font-weight: 800; color: #b45309; }
-  /* M1.5：我的兑换入口 */
-  .gp-my-exchanges { margin-left: 8px; padding: 6px 10px; border-radius: 10px; border: 1px solid #dbeafe; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .mobile-gp-page { min-height: 100vh; background: #f4f6fa; padding: 12px 12px 84px; font-family: 'Noto Sans SC', sans-serif; }
+  /* 2026-11-15：手机端头部改为「标题/余额一行 + 两个入口一行」，解决四个元素挤在一行的问题 */
+  .gp-header { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; column-gap: 8px; row-gap: 8px; align-items: center; padding: 12px; margin-bottom: 12px; background: #fff; border-radius: 16px; box-shadow: 0 4px 16px rgba(26,43,95,0.06); }
+  .gp-title { grid-column: 1; grid-row: 1; font-size: 17px; font-weight: 800; color: #1a2b5f; letter-spacing: .2px; }
+  .gold-balance { grid-column: 2; grid-row: 1; justify-self: end; background: #fef3c7; padding: 6px 12px; border-radius: 12px; font-size: 13px; font-weight: 800; color: #b45309; white-space: nowrap; }
+  /* 两个入口：第二行等宽两列；图标用 ::before 提供，避免再动模板结构 */
+  .gp-my-exchanges { grid-row: 2; grid-column: 1; margin-left: 0; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 10px; border-radius: 11px; border: 1px solid #e6ebf5; background: #f7f9fd; color: #3c4a63; font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .gp-my-exchanges::before { content: '🎁'; font-size: 13px; line-height: 1; }
+  .gp-kg-entry { grid-column: 2; }
+  .gp-kg-entry::before { content: '🕸️'; }
+  .gp-my-exchanges:active { transform: scale(0.97); background: #eef2fb; }
   .gp-tabs { display: flex; gap: 2px; margin-bottom: 12px; overflow-x: auto; }
   .gp-tab { flex: 1; padding: 8px 0; background: none; border: none; font-size: 13px; font-weight: 600; color: #6b7280; cursor: pointer; white-space: nowrap; }
   .gp-tab.active { color: #c41e3a; border-bottom: 2px solid #c41e3a; }

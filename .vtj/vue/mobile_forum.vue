@@ -175,7 +175,7 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed, onMounted, nextTick } from 'vue';
+import { defineComponent, ref, computed, onMounted, nextTick, h } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
@@ -185,7 +185,6 @@ import {
   User,
   View,
   ChatDotRound,
-  Star,
   MoreFilled,
   HomeFilled,
   Reading,
@@ -201,6 +200,24 @@ import {
   fetchMyForumLikes
 } from '@/modules/community/api';
 import { titleColorValue } from '@/components/forum/titleColors';
+
+// 2026-11-16：收藏图标统一用「实心五角星」。模板里:icon="Star"不变，
+// 这里用脚本内组件替换掉 @vtj/icons 的空心 Star，遵守 R3（不改 .vtj 模板）。
+const SolidStar = {
+  name: 'SolidStar',
+  render() {
+    return h(
+      'svg',
+      { viewBox: '0 0 1024 1024', width: '1em', height: '1em', fill: 'currentColor' },
+      [
+        h('path', {
+          d: 'M512 64 L612.5 373.7 L938 373.6 L674.6 564.9 L775.3 874.4 L512 683 L248.7 874.4 L349.4 564.9 L86 373.6 L411.5 373.7 Z'
+        })
+      ]
+    );
+  }
+};
+
 import ForumContent from '@/components/forum/ForumContent.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
@@ -530,7 +547,7 @@ export default defineComponent({
       User,
       View,
       ChatDotRound,
-      Star,
+      Star: SolidStar,
       MoreFilled,
       HomeFilled,
       Reading,

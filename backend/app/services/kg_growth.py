@@ -25,6 +25,7 @@ from ..models.models import (
     KgUserNodeState,
     KnowledgePoint,
     Task,
+    UserTaskProgress,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,10 @@ DEFAULT_ALPHA_HEAT = 1.0
 DEFAULT_BETA_GROWTH = 1.2
 # 个性化任务的奖励加成上限（设计文档 §4.1 权 4）
 MAX_REWARD_BONUS = 0.30
+# 2026-11-17：个性化周任务基础金币。原为 150（叠加 1.2 难度系数后 180/条），
+# 明显高于普通日任务（10~20），用户反馈「给的金币太多」→ 降到 40（生效值 48/条）。
+# 修改后：新生成的任务按新价；本周已生成但未领取的同比例下调（见 ensure_personalized_tasks）。
+KG_PERSONALIZED_BASE_COINS = 40
 
 
 def _point_id_by_name(db: Session, name: str) -> Optional[int]:
@@ -360,7 +365,7 @@ def ensure_personalized_tasks(db: Session, user_id: int, week: Optional[str] = N
             KgUserNodeState.point_id == point_id,
         ).first()
         bonus = reward_bonus(node) if node else 0.0
-        base = int(round(150 * (1 + bonus)))  # 基础 150 币，叠加贡献度加成
+        base = int(round(KG_PERSONALIZED_BASE_COINS * (1 + bonus)))  # 基础 40 币 + 贡献度加成（≤30%）
         if not task:
             task = Task(
                 task_code=code,
@@ -382,6 +387,19 @@ def ensure_personalized_tasks(db: Session, user_id: int, week: Optional[str] = N
                 enabled=1,
             )
             db.add(task)
+        else:
+            # 已存在：把未领取的任务奖励同步到新价（已领取的保持历史值，避免台账对不上）
+            claimed = (
+                db.query(UserTaskProgress)
+                .filter(
+                    UserTaskProgress.task_id == task.task_id,
+                    UserTaskProgress.claimed == 1,
+                )
+                .first()
+            )
+            if not claimed and (task.reward_coins or 0) > base:
+                task.reward_coins = base
+                db.add(task)
         created.append(task)
     db.commit()
     return created

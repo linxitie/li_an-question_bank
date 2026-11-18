@@ -62,6 +62,8 @@ KNOWN_EXTRA_OPERATIONS = {
     ("GET", "/api/admin/shop/stock-alerts"),
     ("GET", "/api/shop/images/{name}"),
     ("POST", "/api/admin/shop/upload-image"),
+    # 2026-11-18：商品图异步抠像状态轮询
+    ("GET", "/api/admin/shop/upload-image/{name}/status"),
     ("GET", "/api/admin/shop/options"),
     ("POST", "/api/admin/shop/options"),
     ("POST", "/api/admin/shop/options/sync-categories"),
@@ -327,6 +329,12 @@ KNOWN_EXTRA_OPERATIONS = {
     ("POST", "/api/media/image"),
     ("PUT", "/api/admin/users/{user_id}/permissions"),
     ("PUT", "/api/admin/users/{user_id}/role"),
+    # ===== 2026-11-15 本轮新增（R11：只登记、不重算 343 条冻结基线）=====
+    # 教师端置顶时长：与管理端 /api/admin/forum/posts/{post_id}/pin 同一套 days 语义。
+    ("POST", "/api/teacher/forum/posts/{post_id}/pin"),
+    # 知识图谱节点坐标持久化（mine/global 分开存，(user,mode,point) 幂等 upsert）。
+    ("GET", "/api/knowledge/kg/layout"),
+    ("PUT", "/api/knowledge/kg/layout"),
     # ===== 备考资料批新增（2026-11-15/16，R11 已在方案与 README 登记）=====
     # D7 批量改信息：一次改多条资料的科目/分类/投放位；逐条 skipped 原因，投放位变更逐条同步卷。
     # 声明在 /admin/{material_id} 动态段之前（与批量删除同一约定），故路径是全静态的 batch-meta。
@@ -367,6 +375,13 @@ KNOWN_EXTRA_OPERATIONS = {
     ("POST", "/api/v1/admin/content-guard/sync-lexicon"),
     ("POST", "/api/v1/growth/review/{wrong_id}/grade"),
     ("PUT", "/api/recruitment/eligibility"),
+    # ===== 合并远端 main 后补登记（2026-11-17）：模块4 专注力/学习周报/方案快照 6 个端点 =====
+    ("POST", "/api/v1/growth/focus/record"),
+    ("GET", "/api/v1/growth/focus/heatmap"),
+    ("GET", "/api/v1/growth/report/weekly"),
+    ("POST", "/api/v1/growth/plan-snapshot/capture"),
+    ("GET", "/api/v1/growth/plan-snapshot/list"),
+    ("GET", "/api/v1/growth/plan-snapshot/diff"),
 }
 
 

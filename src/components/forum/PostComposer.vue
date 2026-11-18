@@ -106,10 +106,18 @@
               </div>
             </div>
             <div v-if="canPin" class="f-row">
-              <label>其他</label>
+              <label>置顶</label>
               <label class="chk-row">
                 <input v-model="form.isTop" type="checkbox" />置顶显示 <small>出现在列表最上方</small>
               </label>
+              <div v-if="form.isTop" class="radio-pills pc-pin-days">
+                <span
+                  v-for="opt in PIN_DAY_OPTIONS"
+                  :key="opt.value"
+                  :class="['rp', { on: form.pinDays === opt.value }]"
+                  @click="form.pinDays = opt.value">{{ opt.label }}</span>
+              </div>
+              <small v-if="form.isTop" class="pc-pin-hint">到期自动取消置顶，也可在列表里随时调整</small>
             </div>
           </div>
 
@@ -151,11 +159,22 @@ export interface PostDraft {
   visibility: 'ALL' | 'CLASSES';
   visibleClasses: string[];
   isTop: boolean;
+  /** 置顶时长（天）：0 = 永久。仅 canPin 时有效；缺省按 7 天 */
+  pinDays?: number;
   /** 是否允许 AI 总结标题（v4）：关闭后后端完全跳过模型调用 */
   aiTitleEnabled?: boolean;
   /** 标题是否原样来自模型建议（用户没改过）*/
   titleFromAi?: boolean;
 }
+
+/** 置顶时长选项（与管理端「置顶时长」弹窗同一套口径：0 = 永久） */
+const PIN_DAY_OPTIONS = [
+  { value: 1, label: '1 天' },
+  { value: 3, label: '3 天' },
+  { value: 7, label: '7 天' },
+  { value: 30, label: '30 天' },
+  { value: 0, label: '永久' }
+];
 
 /** wangEditor 工具栏：图三那一组「原生支持」的菜单（公式/语音/音乐/视频为二期） */
 const richMenus = [
@@ -234,6 +253,7 @@ const form = reactive<PostDraft>({
   visibility: 'ALL',
   visibleClasses: [],
   isTop: false,
+  pinDays: 7,
   aiTitleEnabled: true,
   titleFromAi: false
 });
@@ -292,6 +312,7 @@ function applyInitial(init: Partial<PostDraft>) {
   form.visibleClasses = [...(init.visibleClasses ?? [])];
   inlineAttachCount.value = form.attachments.length;
   form.isTop = Boolean(init.isTop);
+  form.pinDays = typeof init.pinDays === 'number' ? init.pinDays : 7;
   // v4：草稿里存的开关状态优先；没有则默认允许
   form.aiTitleEnabled = init.aiTitleEnabled !== false;
   // 打开弹窗时重置一次性状态：AI 建议次数、是否来自模型
@@ -469,6 +490,7 @@ function toPayload(): PostDraft {
     visibility: form.visibility,
     visibleClasses: form.visibility === 'CLASSES' ? [...form.visibleClasses] : [],
     isTop: props.canPin ? form.isTop : false,
+    pinDays: props.canPin && form.isTop ? form.pinDays : 0,
     aiTitleEnabled: form.aiTitleEnabled,
     titleFromAi: titleFromAi.value
   };
@@ -813,6 +835,14 @@ function onSaveDraft() {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 9px;
+}
+.pc-pin-days {
+  margin-left: 4px;
+}
+.pc-pin-hint {
+  width: 100%;
+  color: #8c99ac;
+  font-size: 12px;
 }
 .pc-tip {
   font-size: 12px;

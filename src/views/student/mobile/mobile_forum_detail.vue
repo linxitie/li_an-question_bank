@@ -31,7 +31,7 @@
             <span v-if="post.user && post.user.signature" class="signature">{{ post.user.signature }}</span>
           </div>
           <span class="time">{{ formatTime(post.createTime) }}</span>
-          <span v-if="post.isTop" class="badge">置顶</span>
+          <span v-if="post.isTop" class="badge" :title="pinTitle(post.pinUntil)">置顶 {{ pinCountdown(post.pinUntil) }}</span>
           <span v-if="post.isEssence" class="badge">精华</span>
         </div>
         <div class="post-content"><ForumContent :content="post.content" :format="post.contentFormat" /></div>
@@ -54,7 +54,7 @@
             title="收藏"
             @click="toggleFavorite"
           >
-            <span class="reaction-emoji">{{ post.favorited ? '★' : '☆' }}</span>
+            <span class="reaction-emoji fav-star">★</span>
             <span v-if="post.favoriteCount" class="reaction-count">{{ post.favoriteCount }}</span>
           </button>
           <span class="action-count">💬 {{ post.commentCount || 0 }}</span>
@@ -95,11 +95,7 @@
                 <span v-if="c.user && c.user.signature" class="signature">{{ c.user.signature }}</span>
               </div>
               <div class="comment-content"><ForumContent :content="c.content" :format="c.contentFormat" /></div>
-              <AttachmentList
-                v-if="c.attachments && c.attachments.length"
-                :attachments="c.attachments"
-                mode="comment"
-              />
+              <!-- 2026-11-15：移动端不做评论附件汇总（与 PC 端一致，评论正文即全部内容） -->
               <div class="comment-actions">
                 <button class="text-btn" @click="startReply(c)">回复</button>
                 <button v-if="isPostAuthor" class="text-btn" @click="togglePin(c)">
@@ -126,7 +122,7 @@
                   title="收藏"
                   @click="reactToCommentFavorite(c)"
                 >
-                  {{ c.favorited ? '★' : '☆' }}<span v-if="c.favoriteCount">{{ c.favoriteCount }}</span>
+                  <span class="fav-star">★</span><span v-if="c.favoriteCount">{{ c.favoriteCount }}</span>
                 </button>
               </div>
               <div class="comment-time">{{ formatDateTime(c.createTime) }}</div>
@@ -146,11 +142,6 @@
               <div class="comment-main">
                 <div class="comment-user">{{ r.user && r.user.nickname }}</div>
                 <div class="comment-content"><ForumContent :content="r.content" :format="r.contentFormat" /></div>
-                <AttachmentList
-                  v-if="r.attachments && r.attachments.length"
-                  :attachments="r.attachments"
-                  mode="comment"
-                />
                 <div class="comment-actions">
                   <button class="text-btn" @click="startReply(c, r)">回复</button>
                   <button
@@ -180,9 +171,6 @@
 
     <footer v-if="post" class="comment-bar">
       <button v-if="replyTo" class="reply-hint" @click="cancelReply">回复 {{ replyToName }} ×</button>
-      <div class="comment-image-bar">
-        <FileUploader v-model="commentImages" :max-docs="3" />
-      </div>
       <div v-if="showPicker" class="comment-picker">
         <EmojiStickerPicker @select="insertEmoji" @close="showPicker = false" />
       </div>
@@ -207,11 +195,10 @@ import { useAuthStore } from '@/stores/auth';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
-import FileUploader from '@/components/forum/FileUploader.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
-import type { ForumImageAttachment } from '@/components/forum/imageUtils';
 import { avatarInitial } from '@/modules/community/avatar';
 import { titleColorValue } from '@/components/forum/titleColors';
+import { pinCountdown, pinTitle } from '@/components/forum/pinCountdown';
 import {
   pinForumComment,
   reportForumTarget,
@@ -243,7 +230,7 @@ const router = useRouter();
 const store = useCommunityStore();
 const authStore = useAuthStore();
 const commentText = ref('');
-const commentImages = ref<ForumImageAttachment[]>([]);
+
 const replyTo = ref<number | null>(null);
 const replyToName = ref('');
 const showPicker = ref(false);
@@ -435,11 +422,9 @@ const submitComment = async () => {
   try {
     await store.submitComment(postId, {
       content: c,
-      parentCommentId: replyTo.value,
-      attachments: commentImages.value.length ? commentImages.value : undefined
+      parentCommentId: replyTo.value
     });
     commentText.value = '';
-    commentImages.value = [];
     cancelReply();
   } catch (e) {
     console.error('评论失败:', e);
@@ -625,6 +610,31 @@ onMounted(() => {
 }
 .reaction-count {
   font-size: 12px;
+}
+/* 2026-11-15：收藏统一用实心星（未收藏=灰实心，已收藏=金实心），不再出现空心 ☆ */
+.fav-star {
+  font-size: 15px;
+  line-height: 1;
+  color: #cbd5e1;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.reaction-btn.fav-only .fav-star {
+  color: #cbd5e1;
+}
+.reaction-btn.fav-only.active {
+  border-color: #f3c969;
+  background: #fffbeb;
+  color: #b45309;
+}
+.reaction-btn.fav-only.active .fav-star {
+  color: #f59e0b;
+}
+.mini-reaction .fav-star {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.mini-reaction.active .fav-star {
+  color: #f59e0b;
 }
 .comment-row {
   display: flex;
@@ -830,14 +840,9 @@ onMounted(() => {
   padding-bottom: 88px;
 }
 
-/* 单行：😊 → ＋ → 输入框 → 发送（DOM 顺序不变，仅改视觉顺序） */
+/* 单行：😊 → 输入框 → 发送（DOM 顺序不变，仅改视觉顺序） */
 .comment-bar .emoji-btn {
   order: 1;
-}
-.comment-bar .comment-image-bar {
-  order: 2;
-  width: auto;
-  flex: 0 0 auto;
 }
 .comment-bar .comment-input {
   order: 3;
@@ -846,9 +851,6 @@ onMounted(() => {
 }
 .comment-bar .send-btn {
   order: 4;
-}
-.comment-image-bar {
-  width: 100%;
 }
 .reply-hint {
   position: absolute;
@@ -902,34 +904,6 @@ onMounted(() => {
   opacity: 0.5;
 }
 
-/* 上传按钮缩成 36×36 圆形「＋」；原文字视觉隐藏保留给读屏。
-   依赖 FileUploader 的 .fu-add / .fu-thumb 类名，改组件时需同步。 */
-.comment-bar :deep(.fu-add) {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 50%;
-  font-size: 0;
-  position: relative;
-}
-.comment-bar :deep(.fu-add::before) {
-  content: '+';
-  font-size: 20px;
-  line-height: 1;
-  color: #1a2b5f;
-}
-.comment-bar :deep(.fu-add span) {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-.comment-bar :deep(.fu-thumb) {
-  width: 36px;
-  height: 36px;
-}
 /* 2026-11-09：手机端点赞/收藏动效 */
 @keyframes m-icon-pop {
   0% { transform: scale(1); }

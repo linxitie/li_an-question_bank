@@ -187,4 +187,118 @@ onBeforeUnmount(() => {
 /* 2026-11-09：内容区不滚动，图谱撑满，详情条贴弹窗底部 */
 .kgm-body { flex: 1; min-height: 0; overflow: hidden; display: flex; }
 .kgm-body :deep(.kgp) { flex: 1; min-height: 0; }
+
+/* ===== 2026-11-16：手机端弹窗改为「全屏 + 可滚动」=====
+   旧版 .kgm-body 是 overflow:hidden 的 flex 容器，内容（画布+3 张侧卡+详情条）比 body 高时
+   会被压缩/裁切，出现「做题习惯」文字压到画布提示语上的错位。这里把手机端 body 改成可滚动块级容器，
+   并把弹窗改成整屏 sheet，任何机型/字体缩放都不会再重叠。 */
+@media (max-width: 768px) {
+  .kgm-mask {
+    padding: 0;
+    align-items: stretch;
+  }
+  .kgm-modal {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+  }
+  /* 标题区竖排（窄屏下横排会把标题挤成一字一行），操作行单独一行 */
+  .kgm-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 14px 10px;
+    background: #fff;
+    box-shadow: 0 1px 0 #eef2f7;
+  }
+  .kgm-head > div:first-child {
+    min-width: 0;
+  }
+  .kgm-head h3 {
+    font-size: 17px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kgm-sub {
+    font-size: 11px;
+    line-height: 1.5;
+    margin-top: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .kgm-actions {
+    width: 100%;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .kgm-btn {
+    flex: 0 1 auto;
+    padding: 8px 12px;
+    font-size: 12.5px;
+    line-height: 1.25;
+    max-width: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .kgm-close {
+    width: 34px;
+    height: 34px;
+    flex: none;
+  }
+  /* 关键：可滚动 + 块级，避免内容被压缩后与画布提示语重叠 */
+  .kgm-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: block;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    /* 底部多留 96px：节点详情条是 sticky 的，留出滚动余量避免遮住最后一张卡 */
+    padding: 10px 10px calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+  /* 面板自身带「弹窗里撑满高度」的规则（.kgp height:100% / grid flex:1），
+     在可滚动的手机弹窗里会把画布行压扁，导致 svg 溢出、提示语与侧卡重叠。
+     这里把弹窗内的图谱强制改成「内容高度」，由 .kgm-body 统一滚动。 */
+  .kgm-body :deep(.kgp) {
+    height: auto;
+    display: block;
+    flex: none;
+    min-height: 0;
+  }
+  .kgm-body :deep(.kgp-grid) {
+    height: auto;
+    flex: none;
+  }
+  .kgm-body :deep(.kgp-canvas-card) {
+    min-height: auto;
+  }
+  .kgm-body :deep(.kgp-svg) {
+    flex: none;
+    height: 260px;
+    min-height: 0;
+  }
+  .kgm-body :deep(.is-compact .kgp-svg) {
+    flex: none;
+    height: 240px;
+    min-height: 0;
+  }
+  .kgm-body :deep(.kgp-side) {
+    overflow: visible;
+    min-height: 0;
+  }
+}
 </style>

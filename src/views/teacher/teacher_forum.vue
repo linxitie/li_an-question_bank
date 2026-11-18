@@ -48,6 +48,7 @@
               :user-id="post.id"
               :user-type="post.authorType || 'student'" />
             <span class="tf-status" :class="`st-${post.status}`">{{ statusLabel(post.status) }}</span>
+            <span v-if="post.isTop" class="tf-pin-badge" :title="pinTitle(post.pinUntil)">置顶 {{ pinCountdown(post.pinUntil) }}</span>
             <span class="tf-title" :style="{ color: titleColorValue(post.titleColor) }"><span v-if="post.aiTitle" class="ai-title-tag">AI生成</span>{{ post.title }}</span>
             <span class="tf-meta">{{ post.authorClass || '未分班' }}</span>
           </div>
@@ -64,6 +65,9 @@
               {{ post.favorited ? '★' : '☆' }} {{ post.favoriteCount || 0 }}
             </button>
             <button class="tf-link" @click.stop="openPost(post)">查看评论</button>
+            <button v-if="post.canPin && post.status === 'NORMAL'" class="tf-link" @click.stop="openPin(post)">
+              {{ post.isTop ? '取消置顶' : '置顶' }}
+            </button>
             <button v-if="post.canDelete" class="tf-danger" @click.stop="askHidePost(post)">隐藏帖子</button>
           </div>
         </article>
@@ -74,6 +78,9 @@
           <button class="tf-close" @click="detail = null">×</button>
           <div class="tf-modal-scroll">
           <h2 :style="{ color: titleColorValue(detail.titleColor) }"><span v-if="detail.aiTitle" class="ai-title-tag">AI生成</span>{{ detail.title }}</h2>
+          <p v-if="detail.isTop" class="tf-pin-badge tf-pin-in-detail" :title="pinTitle(detail.pinUntil)">
+            置顶 {{ pinCountdown(detail.pinUntil) }}
+          </p>
           <div class="tf-detail-author">
             <UserBadge
               size="sm"
@@ -94,6 +101,12 @@
             <button class="tf-detail-act" :class="{ on: detail.favorited }" @click.stop="detailPostFavorite">★ {{ detail.favoriteCount || 0 }}</button>
             <span>💬 {{ detail.commentCount || 0 }}</span>
             <span>👁 {{ detail.viewCount || 0 }}</span>
+            <button
+              v-if="detail.canPin && detail.status === 'NORMAL'"
+              class="tf-detail-act"
+              @click.stop="openPin(detail)">
+              {{ detail.isTop ? '取消置顶' : '置顶' }}
+            </button>
           </div>
           <div class="tf-comment-sort">
             <button
@@ -297,6 +310,28 @@
       </div>
     </div>
 
+    <!-- 置顶时长（2026-11-15）：教师端与管理端同一套 1/3/7/30/永久 -->
+    <div v-if="pinDialog.open" class="tf-modal tf-modal-l1" @click.self="closePin">
+      <div class="tf-modal-card tf-pin-card">
+        <button class="tf-close" @click="closePin">×</button>
+        <h2>置顶帖子</h2>
+        <p class="tf-pin-tip">置顶后帖子出现在列表最上方；到期自动取消置顶，也可随时手动取消。</p>
+        <div class="tf-pin-days">
+          <button
+            v-for="opt in PIN_DAY_OPTIONS"
+            :key="opt.value"
+            :class="{ on: pinDialog.days === opt.value }"
+            @click="pinDialog.days = opt.value">{{ opt.label }}</button>
+        </div>
+        <div class="tf-pin-ft">
+          <button class="tf-btn" @click="closePin">取消</button>
+          <button class="tf-btn tf-btn-primary" :disabled="pinDialog.submitting" @click="submitPin">
+            {{ pinDialog.submitting ? '处理中…' : '确认置顶' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- P3-07 + 统一发帖弹窗：与管理员端/学生端共用 PostComposer（含草稿、可见范围、置顶） -->
     <PostComposer
       v-model:visible="postForm.visible"
@@ -362,6 +397,7 @@ import {
 import { fetchMyForumFavorites, fetchMyForumLikes } from '@/modules/community/api';
 import FileUploader from '@/components/forum/FileUploader.vue';
 import PostComposer, { type PostDraft } from '@/components/forum/PostComposer.vue';
+import { pinCountdown, pinTitle } from '@/components/forum/pinCountdown';
 import { fetchMyForumDraft, saveMyForumDraft } from '@/modules/community/api';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
 import {
@@ -445,6 +481,68 @@ const reasonDialog = reactive({
   targetId: 0
 });
 
+// 置顶时长（2026-11-15）：与管理端同一套 1/3/7/30/永久，0 = 永久
+const PIN_DAY_OPTIONS = [
+  { value: 1, label: '1 天' },
+  { value: 3, label: '3 天' },
+  { value: 7, label: '7 天' },
+  { value: 30, label: '30 天' },
+  { value: 0, label: '永久' }
+];
+const pinDialog = reactive({
+  open: false,
+  days: 7,
+  submitting: false,
+  target: null as ModerationPost | null
+});
+
+function closePin() {
+  pinDialog.open = false;
+  pinDialog.target = null;
+}
+
+/** 已置顶的帖子直接取消；未置顶的先选时长 */
+function openPin(post: ModerationPost) {
+  if (post.isTop) {
+    void applyPin(post, false);
+    return;
+  }
+  pinDialog.target = post;
+  pinDialog.days = 7;
+  pinDialog.open = true;
+}
+
+async function applyPin(post: ModerationPost, pinned: boolean, days?: number): Promise<boolean> {
+  try {
+    const res = await teacherForumApi.pinPost(post.id, pinned, days);
+    post.isTop = res.isTop;
+    post.pinUntil = res.pinUntil;
+    if (detail.value && detail.value.id === post.id) {
+      detail.value.isTop = res.isTop;
+      detail.value.pinUntil = res.pinUntil;
+    }
+    ElMessage.success(
+      pinned ? (days && days > 0 ? `已置顶 ${days} 天` : '已永久置顶') : '已取消置顶'
+    );
+    await loadPosts();
+    return true;
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || '置顶失败');
+    return false;
+  }
+}
+
+async function submitPin() {
+  if (!pinDialog.target) return;
+  pinDialog.submitting = true;
+  try {
+    const ok = await applyPin(pinDialog.target, true, pinDialog.days);
+    if (ok) closePin();
+  } finally {
+    pinDialog.submitting = false;
+  }
+}
+
 const statusLabel = (status: string) =>
   ({ NORMAL: '正常', BLOCKED: '待复核隐藏', DELETED: '已删除' } as Record<string, string>)[status] ||
   status;
@@ -521,7 +619,7 @@ const loadSideCards = async () => {
 const submitPost = async (payload: PostDraft) => {
   postForm.submitting = true;
   try {
-    await createForumPostWithVisibility({
+    const created: any = await createForumPostWithVisibility({
       title: payload.title,
       content: payload.content,
       visibility: payload.visibility,
@@ -532,7 +630,14 @@ const submitPost = async (payload: PostDraft) => {
       aiTitleEnabled: payload.aiTitleEnabled !== false,
       titleFromAi: Boolean(payload.titleFromAi)
     });
-    ElMessage.success('发布成功');
+    // 2026-11-15：create_post 不接受 is_top，置顶走教师端置顶接口（支持 1/3/7/30/永久）
+    if (payload.isTop && created?.id) {
+      const days = payload.pinDays ?? 7;
+      await teacherForumApi.pinPost(created.id, true, days);
+      ElMessage.success(days > 0 ? `发布成功，已置顶 ${days} 天` : '发布成功，已永久置顶');
+    } else {
+      ElMessage.success('发布成功');
+    }
     postForm.visible = false;
     postDraftInitial.value = null;
     await Promise.all([loadPosts(), loadSideCards()]);
@@ -946,6 +1051,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown));
 .tf-danger.small { font-size: 12px; }
 .tf-empty { color: #8a94ad; text-align: center; padding: 30px; }
 .tf-warn { background: #fff7e6; color: #b45309; border: 1px solid #fbe0b0; border-radius: 8px; padding: 10px 12px; font-size: 13px; margin: 0 0 14px; }
+/* 置顶（2026-11-15）：列表徽标 + 时长弹窗 */
+.tf-pin-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #fff2d9; color: #b45309; border: 1px solid #f7ddb0; }
+.tf-pin-in-detail { margin: 0 0 8px; display: inline-block; }
+.tf-pin-card { width: 420px; max-width: 92vw; }
+.tf-pin-tip { margin: 4px 0 14px; font-size: 13px; color: #8a94ad; line-height: 1.6; }
+.tf-pin-days { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.tf-pin-days button { border: 1px solid #e6ebf3; background: #fff; border-radius: 8px; padding: 6px 14px; font-size: 13px; color: #475569; cursor: pointer; transition: all .15s; }
+.tf-pin-days button.on { border-color: #1a365d; color: #1a365d; background: #f2f7fc; font-weight: 600; }
+.tf-pin-ft { display: flex; justify-content: flex-end; gap: 10px; }
+.tf-pin-ft .tf-btn.tf-btn-primary { background: #1a365d; color: #fff; }
 .tf-modal { position: fixed; inset: 0; z-index: 9000; background: rgba(8,12,24,.45); display: flex; align-items: center; justify-content: center; padding: 20px; }
 .tf-modal-card { position: relative; display: flex; flex-direction: column; width: min(720px, 94vw); max-height: 86vh; overflow: hidden; background: #fff; border-radius: 14px; padding: 22px; }
 .tf-close { position: absolute; top: 8px; right: 12px; border: none; background: none; font-size: 22px; color: #8a94ad; cursor: pointer; }

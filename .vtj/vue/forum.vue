@@ -761,6 +761,9 @@ import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
         hotIsWeek: false,
         hotFrom: new Date().toISOString().slice(0, 10),
         hotTo: new Date().toISOString().slice(0, 10),
+        // 2026-11-17：热门榜排序（likes/favorites/comments）与快捷时间范围（today/7/30/180/365）
+        hotSort: 'likes',
+        hotQuick: 'today',
         // 热门帖子「查看更多」
         hotAll: [],
         showHotAll: false,
@@ -1585,9 +1588,12 @@ import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
       async openHotAll() {
         this.state.showHotAll = true;
         this.state.hotAllLoading = true;
+        // 模板里没有快捷范围/排序控件（.vtj 模板按 R3 不由 AI 修改），
+        // 打开弹窗后把注入了事件的工具栏挂到 .hot-range 下方（脚本侧 DOM 注入，见 mountHotToolbar）。
+        this.$nextTick(() => this.mountHotToolbar());
         try {
           const res: any = await fetchForumPosts({
-            sortBy: 'likes',
+            sortBy: (this.state.hotSort || 'likes') as any,
             order: 'desc',
             dateFrom: this.state.hotFrom || undefined,
             dateTo: this.state.hotTo || undefined,
@@ -1605,6 +1611,109 @@ import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
       },
       closeHotAll() {
         this.state.showHotAll = false;
+      },
+
+      /** 2026-11-17：热门榜快捷时间范围（今天 / 近7天 / 近30天 / 近半年 / 近一年） */
+      setHotRange(kind: string) {
+        const fmt = (d: Date) => {
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${d.getFullYear()}-${m}-${day}`;
+        };
+        const today = new Date();
+        if (kind === 'today') {
+          this.state.hotFrom = fmt(today);
+          this.state.hotTo = fmt(today);
+        } else {
+          const days = Math.max(1, Number(kind) || 7);
+          const from = new Date(today.getTime() - (days - 1) * 86400000);
+          this.state.hotFrom = fmt(from);
+          this.state.hotTo = fmt(today);
+        }
+        this.state.hotQuick = String(kind);
+        this.openHotAll();
+      },
+
+      /** 2026-11-17：热门榜排序方式（点赞量 / 收藏量 / 回复量） */
+      setHotSort(kind: string) {
+        this.state.hotSort = kind;
+        this.openHotAll();
+      },
+
+      /**
+       * 2026-11-17：把「快捷时间范围 + 排序方式」工具栏注入热门弹窗。
+       * 为什么用 DOM 注入而不是改模板：.vtj 页面的 <template> 按 R3 只能由用户在
+       * 设计器里改，AI 只允许动 <script>；这里用脚本创建节点、内联样式与事件，
+       * 效果与模板等价，且不产生 DSL 漂移。
+       */
+      mountHotToolbar() {
+        const card = document.querySelector('.hot-all-card');
+        const rangeRow = card && card.querySelector('.hot-range');
+        if (!card || !rangeRow) return;
+        const old = card.querySelector('.hotf-toolbar');
+        if (old) old.remove();
+
+        const chip = (label: string, active: boolean, onClick: () => void) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = label;
+          btn.style.cssText = [
+            'padding:5px 10px',
+            'font-size:12px',
+            'line-height:1.2',
+            'border-radius:999px',
+            'cursor:pointer',
+            active
+              ? 'background:#1a365d;color:#fff;border:1px solid #1a365d'
+              : 'background:#fff;color:#3c4a63;border:1px solid #dbe3ee'
+          ].join(';');
+          btn.addEventListener('click', onClick);
+          return btn;
+        };
+        const row = (label: string, chips: HTMLElement[]) => {
+          const wrap = document.createElement('div');
+          wrap.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap';
+          const tag = document.createElement('span');
+          tag.textContent = label;
+          tag.style.cssText = 'font-size:12px;color:#7c869c;margin-right:2px';
+          wrap.appendChild(tag);
+          chips.forEach((c) => wrap.appendChild(c));
+          return wrap;
+        };
+
+        const bar = document.createElement('div');
+        bar.className = 'hotf-toolbar';
+        bar.style.cssText = [
+          'display:flex',
+          'flex-direction:column',
+          'gap:8px',
+          'padding:10px 12px',
+          'margin:0 0 10px',
+          'background:#f8fafc',
+          'border:1px solid #e6ebf2',
+          'border-radius:10px'
+        ].join(';');
+
+        const rangeChips = [
+          ['today', '今天'],
+          ['7', '近 7 天'],
+          ['30', '近 30 天'],
+          ['180', '近半年'],
+          ['365', '近一年']
+        ].map(([key, label]) =>
+          chip(label, this.state.hotQuick === key, () => this.setHotRange(key))
+        );
+        const sortChips = [
+          ['likes', '按点赞量'],
+          ['favorites', '按收藏量'],
+          ['comments', '按回复量']
+        ].map(([key, label]) =>
+          chip(label, (this.state.hotSort || 'likes') === key, () => this.setHotSort(key))
+        );
+
+        bar.appendChild(row('时间', rangeChips));
+        bar.appendChild(row('排序', sortChips));
+        rangeRow.parentNode.insertBefore(bar, rangeRow.nextSibling);
       },
 
       async openMyPosts() {
@@ -3096,6 +3205,24 @@ import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
     display: flex;
     align-items: center;
     gap: 12px;
+  }
+  /* 2026-11-17：热门前 100 条里的排名徽标被 flex-wrap 挤成了单独一行，
+     改成绝对定位挂在卡片左上，作者信息仍独占一行，视觉上回到「1 作者 标题」的阅读顺序。 */
+  .hot-all-card .my-post-item {
+    position: relative;
+    align-items: flex-start;
+    padding-left: 34px;
+    padding-top: 10px;
+  }
+  .hot-all-card .my-post-item .hot-rank {
+    position: absolute;
+    left: 0;
+    top: 10px;
+    margin: 0;
+  }
+  .hot-all-card .my-post-item .list-author {
+    flex-basis: 100%;
+    padding-left: 0;
   }
   .my-post-date {
     font-size: 12px;

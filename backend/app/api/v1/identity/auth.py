@@ -28,6 +28,8 @@ from ....core.security import (
     get_current_user
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -267,6 +269,15 @@ async def register_user(
 
     commit_with_retry(db)
     db.refresh(new_user)
+
+    # 2026-11-18：注册即建知识库空目录（用户/<学号>/），让新用户从第一天就有自己的
+    # Obsidian 学习轨迹文件夹；失败只记日志，不影响注册结果。
+    try:
+        from ....services import kg_vault_export
+
+        kg_vault_export.export_user_by_name(new_user.username)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("注册后知识库初始化失败: %s", exc)
 
     return {"message": "注册成功", "user_id": new_user.user_id}
 

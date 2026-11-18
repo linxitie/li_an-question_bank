@@ -25,7 +25,7 @@
           @pointermove="onPointerMove"
           @pointerup="onPointerUp"
           @pointercancel="onPointerUp"
-          @dblclick="fitView"
+          @dblclick="resetLayout"
         >
           <rect
             class="kgp-bg"
@@ -91,7 +91,7 @@
             </text>
           </g>
         </svg>
-        <p class="kgp-canvas-tip">滚轮缩放 · 按住空白处拖拽平移 · 悬停节点高亮关联 · 双击复位</p>
+        <p class="kgp-canvas-tip">缩放 / 拖拽平移 · 悬停或点按高亮关联 · 拖拽节点自动保存 · 双击复位</p>
 
 
       </div>
@@ -142,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
 interface KgNode {
   point_id: number;
@@ -544,8 +544,12 @@ function onPointerMove(e: PointerEvent) {
 
 function onPointerUp() {
   if (dragId.value != null) {
-    if (dragMoved < 5) activeId.value = dragId.value;
+    const moved = dragMoved >= 5;
+    if (!moved) activeId.value = dragId.value;
     dragId.value = null;
+    dragMoved = 0;
+    // 真拖拽（不是点击选中）才写库，避免点一下就产生一次保存请求
+    if (moved) scheduleSaveLayout();
   }
   panStart = null;
   panning.value = false;
@@ -631,11 +635,87 @@ function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   return fetch(url, { credentials: 'include', ...(init || {}) });
 }
 
+/**
+ * 布局持久化（2026-11-15）：
+ * - 拖拽结束 → 700ms 防抖写回 /api/knowledge/kg/layout（(user,mode,point_id) 幂等 upsert）；
+ * - 重新载入 / 换设备 → 先按自动布局算，再把库里的坐标盖上去；
+ * - 双击复位 → 清空该模式的坐标并写库，下次进来回到自动布局。
+ */
+let restoringLayout = false;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** 只提交当前图上仍存在的节点，避免历史节点坐标越攒越多 */
+function layoutNodesPayload(): Array<{ point_id: number; x: number; y: number }> {
+  const ids = new Set(nodes.value.map((node) => node.point_id));
+  return Object.entries(dragPos.value)
+    .map(([id, point]) => ({
+      point_id: Number(id),
+      x: Math.round(point.x * 100) / 100,
+      y: Math.round(point.y * 100) / 100
+    }))
+    .filter((item) => ids.has(item.point_id));
+}
+
+async function applySavedLayout(): Promise<void> {
+  try {
+    const res = await apiFetch('/api/knowledge/kg/layout?mode=' + props.mode);
+    if (!res.ok) return;
+    const data = await res.json();
+    const ids = new Set(nodes.value.map((node) => node.point_id));
+    const map: Record<number, { x: number; y: number }> = {};
+    for (const item of data.nodes || []) {
+      if (ids.has(item.point_id)) map[item.point_id] = { x: item.x, y: item.y };
+    }
+    dragPos.value = map;
+  } catch (e) {
+    /* 读不到坐标就用自动布局，不打扰用户 */
+  }
+}
+
+async function saveLayout(): Promise<void> {
+  const items = layoutNodesPayload();
+  if (!items.length) return;
+  try {
+    await apiFetch('/api/knowledge/kg/layout', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: props.mode, nodes: items })
+    });
+  } catch (e) {
+    /* 写库失败不影响本次拖拽效果 */
+  }
+}
+
+function scheduleSaveLayout(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void saveLayout();
+  }, 700);
+}
+
+/** 双击复位：清空手动坐标 → 回到自动布局，并把「已清空」写回后端 */
+async function resetLayout(): Promise<void> {
+  dragPos.value = {};
+  hoverId.value = null;
+  fitView();
+  try {
+    await apiFetch('/api/knowledge/kg/layout', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: props.mode, reset: true })
+    });
+  } catch (e) {
+    /* 复位已在本地生效；写库失败时下次拖拽会重新覆盖 */
+  }
+}
+
 async function loadAll(): Promise<void> {
   loading.value = true;
   error.value = '';
-  if (props.mode === 'global') {
-    try {
+  restoringLayout = true;
+  try {
+    if (props.mode === 'global') {
       const res = await apiFetch('/api/knowledge/kg/global?limit=800');
       const data = await res.json();
       nodes.value = (data.nodes || []).map((n: any) => ({
@@ -648,40 +728,39 @@ async function loadAll(): Promise<void> {
         contribution: n.contribution || 0
       }));
       edges.value = data.edges || [];
-      dragPos.value = {};
-      if (!activeId.value && nodes.value.length) activeId.value = nodes.value[0].point_id;
-    } catch (e: any) {
-      error.value = e?.message || '加载失败';
-    } finally {
-      loading.value = false;
+    } else {
+      const [nodeRes, edgeRes, habitRes, sampleRes] = await Promise.all([
+        apiFetch('/api/knowledge/kg/nodes/mine?limit=60'),
+        apiFetch('/api/knowledge/kg/edges/mine?limit=120'),
+        apiFetch('/api/knowledge/kg/habits/mine?days=30'),
+        apiFetch('/api/knowledge/kg/sample?n=5')
+      ]);
+      nodes.value = (await nodeRes.json()).items || [];
+      edges.value = (await edgeRes.json()).items || [];
+      habits.value = { ...habits.value, ...(await habitRes.json()) };
+      samples.value = (await sampleRes.json()).items || [];
     }
-    return;
-  }
-  try {
-    const [nodeRes, edgeRes, habitRes, sampleRes] = await Promise.all([
-      apiFetch('/api/knowledge/kg/nodes/mine?limit=60'),
-      apiFetch('/api/knowledge/kg/edges/mine?limit=120'),
-      apiFetch('/api/knowledge/kg/habits/mine?days=30'),
-      apiFetch('/api/knowledge/kg/sample?n=5')
-    ]);
-    nodes.value = (await nodeRes.json()).items || [];
-    edges.value = (await edgeRes.json()).items || [];
-    habits.value = { ...habits.value, ...(await habitRes.json()) };
-    samples.value = (await sampleRes.json()).items || [];
     if (!activeId.value && nodes.value.length) activeId.value = nodes.value[0].point_id;
+    // 节点就位后再盖手动坐标，否则等于白读
+    await applySavedLayout();
   } catch (e: any) {
     error.value = e?.message || '加载失败';
   } finally {
     loading.value = false;
+    nextTick(() => {
+      restoringLayout = false;
+      fitView();
+    });
   }
 }
 
 defineExpose({ loadAll });
 
-// 数据变化后重置拖拽并重新适配视口（节点铺满但不重叠）
+// 数据变化后重置拖拽并重新适配视口（节点铺满但不重叠）；回填坐标期间不重置
 watch(
   [nodes, edges],
   () => {
+    if (restoringLayout) return;
     dragPos.value = {};
     hoverId.value = null;
     nextTick(() => fitView());
@@ -690,6 +769,12 @@ watch(
 );
 
 onMounted(loadAll);
+onBeforeUnmount(() => {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+});
 </script>
 
 <style scoped>
@@ -884,4 +969,91 @@ onMounted(loadAll);
 .kgp-side { overflow-y: auto; min-height: 0; }
 .is-global .kgp-grid { grid-template-columns: minmax(0, 1fr); }
 .is-global .kgp-side { display: none; }
+
+/* ===== 手机端（2026-11-15）：单列 + 紧凑排版，避免 1fr+300px 两列在 390px 屏上挤成一团 ===== */
+@media (max-width: 640px) {
+  .kgp-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .kgp-canvas-card {
+    padding: 6px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 42%);
+  }
+  .kgp-svg {
+    height: 300px;
+  }
+  .is-compact .kgp-svg {
+    height: 270px;
+  }
+  /* 提示从「压在画布上」改成「画布下方一行」，小屏不再遮挡节点 */
+  .kgp-canvas-tip {
+    position: static;
+    margin: 6px 0 0;
+    padding: 0;
+    background: transparent;
+    font-size: 10.5px;
+    line-height: 1.5;
+    text-align: center;
+    color: #9aa4b8;
+  }
+  .kgp-side {
+    gap: 8px;
+  }
+  .kgp-card {
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+  .kgp-card h3 {
+    margin: 0 0 6px;
+    font-size: 12.5px;
+  }
+  .kgp-summary {
+    font-size: 11.5px;
+    margin-bottom: 6px;
+  }
+  .kgp-kv {
+    grid-template-columns: 72px 1fr;
+    font-size: 11.5px;
+  }
+  /* 候选/最热节点：小屏改单行「名称 …… 指标」，比堆两行更省高度也更好扫读 */
+  .kgp-samples li {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 0 0 6px;
+    border-bottom: 1px dashed #eef2f7;
+  }
+  .kgp-samples li:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+  .kgp-sample-name {
+    font-size: 12px;
+    color: #1f2937;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .kgp-sample-meta {
+    font-size: 10.5px;
+    color: #94a3b8;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .kgp-node-detail {
+    padding: 8px 10px;
+    font-size: 11.5px;
+    gap: 4px 12px;
+  }
+  .kgp-node-detail-bottom {
+    position: sticky;
+    bottom: 8px;
+    z-index: 5;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  }
+}
 </style>

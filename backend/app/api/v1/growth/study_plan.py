@@ -452,8 +452,31 @@ async def toggle_task(
     else:
         goal.completed_time = None
         goal.current_count = 0
+
+    # 2026-11-15：勾选完成即自动发币（与 badge_task 对齐）。
+    # 幂等靠 coin_claimed：取消勾选再勾选不会重复发，也不会因为玩家反复 toggle 刷币。
+    auto_coins = 0
+    if goal.is_completed == 1:
+        from ....services.goal_task_reward import auto_claim_goal_task
+
+        auto_coins = auto_claim_goal_task(db, current_user, goal)
     db.commit()
-    return {"goal_id": goal.goal_id, "is_completed": goal.is_completed}
+
+    if auto_coins > 0:
+        # 里程碑记忆（长期陪伴）：与手动领取保持同一口径
+        try:
+            _write_milestone(current_user.user_id, goal.plan_id, db)
+            db.commit()
+        except Exception as e:
+            logger.warning("里程碑写入失败: %s", e)
+
+    return {
+        "goal_id": goal.goal_id,
+        "is_completed": goal.is_completed,
+        "coin_claimed": goal.coin_claimed,
+        "auto_claimed_coins": auto_coins,
+        "balance": current_user.total_coins,
+    }
 
 
 @router.get("/{plan_id}/tasks", summary="某计划下所有任务")

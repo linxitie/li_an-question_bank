@@ -425,7 +425,9 @@ def _log_violation(
 @router.get("/posts", summary="获取论坛帖子列表")
 async def get_forum_posts(
     share_type: Optional[str] = Query(None, description="分享类型: EXPERIENCE/RESOURCE/DISCUSSION/FEELING/QUESTION"),
-    sort_by: Literal["time", "likes", "comments", "views"] = Query("time", description="排序字段"),
+    sort_by: Literal["time", "likes", "comments", "views", "favorites", "replies"] = Query(
+        "time", description="排序字段：时间/点赞/评论/浏览/收藏/回复（replies 与 comments 同义）"
+    ),
     order: Literal["asc", "desc"] = Query("desc", description="排序方向"),
     keyword: Optional[str] = Query(None, description="标题/正文关键词"),
     sort: Optional[Literal["new", "hot"]] = Query(None, description="快捷排序: new/hot"),
@@ -487,11 +489,22 @@ async def get_forum_posts(
     elif sort == "new":
         sort_expr = ForumPost.create_time.desc()
     else:
+        # 2026-11-17：热门榜排序新增「收藏量」。
+        # forum_post 表没有 favorite_count 列（收藏是 forum_favorite 的一行），
+        # 因此用关联子查询计数，避免 join+group_by 破坏既有分页与 total 口径。
+        favorite_count_subq = (
+            db.query(func.count(ForumFavorite.favorite_id))
+            .filter(ForumFavorite.post_id == ForumPost.post_id)
+            .correlate(ForumPost)
+            .scalar_subquery()
+        )
         sort_field = {
             "time": ForumPost.create_time,
             "likes": ForumPost.like_count,
             "comments": ForumPost.comment_count,
+            "replies": ForumPost.comment_count,
             "views": ForumPost.view_count,
+            "favorites": favorite_count_subq,
         }[sort_by]
         sort_expr = sort_field.asc() if order == "asc" else sort_field.desc()
     posts = query.order_by(

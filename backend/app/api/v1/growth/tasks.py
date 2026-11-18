@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
@@ -157,6 +158,50 @@ def _task_view(task: Task, user_id: int, db: Session, pinned_slot: int = 0) -> d
 
 # ------------------------- 随机任务分配 -------------------------
 
+def _ensure_kg_personalized_tasks(user_id: int, db: Session) -> list:
+    """2026-11-17：知识图谱个性化周任务的「自动生成」入口。
+
+    此前只有图谱页的「生成本周个性化任务」按钮会调用 /api/knowledge/kg/generate；
+    用户不点就永远没有任务。现在任务中心（overview）每次进来先补一次：
+    本周还没有本人的 kg_ 任务时生成 2 条（幂等，按 task_code 复用）；
+    已存在时把未领取的旧价任务同步到新价（150 → 40，2026-11-17 下调）。
+    """
+    from app.services import kg_growth
+
+    week = weekly.week_key()
+    rows = (
+        db.query(Task)
+        .filter(
+            Task.t_type == "weekly",
+            Task.personalized_for == user_id,
+            Task.task_code.like(f"kg_{week}_%"),
+        )
+        .all()
+    )
+    if rows:
+        # 已生成过：把「旧价（150 基）」未领取的任务同步到新价（2026-11-17 下调到 40）
+        changed = False
+        for task in rows:
+            if (task.reward_coins or 0) <= kg_growth.KG_PERSONALIZED_BASE_COINS:
+                continue
+            claimed = (
+                db.query(UserTaskProgress)
+                .filter(
+                    UserTaskProgress.task_id == task.task_id,
+                    UserTaskProgress.claimed == 1,
+                )
+                .first()
+            )
+            if not claimed:
+                task.reward_coins = kg_growth.KG_PERSONALIZED_BASE_COINS
+                db.add(task)
+                changed = True
+        if changed:
+            db.commit()
+        return []
+    return kg_growth.ensure_personalized_tasks(db, user_id, week=week, n=2)
+
+
 def _ensure_random_tasks(user_id: int, db: Session):
     """确保当天已分配随机任务，返回已分配的 UserTaskProgress 列表"""
     today = _today_key()
@@ -239,13 +284,28 @@ async def overview(
         Task.t_type == "random",
     ).all() if random_task_ids else []
 
+    # 2026-11-17：图谱个性化周任务自动生成（不再依赖图谱页按钮，失败不影响列表）
+    try:
+        _ensure_kg_personalized_tasks(current_user.user_id, db)
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        logger.warning("知识图谱个性化任务自动生成失败: %s", exc)
+
     # 周常任务（M2：按置顶槽位排序，置顶任务套稀缺系数；M3：附带本人个性化任务）
     weekly.ensure_week_pool(db)
     slots = weekly.pinned_slots(db)
+    # 个性化任务只在「生成它的那一周」出现：否则每周新生成 2 条，旧任务会一直堆在列表里
+    kg_week = weekly.week_key()
     weekly_tasks = db.query(Task).filter(
         Task.t_type == "weekly",
         Task.enabled == 1,
-        (Task.personalized_for.is_(None)) | (Task.personalized_for == current_user.user_id),
+        or_(
+            Task.personalized_for.is_(None),
+            and_(
+                Task.personalized_for == current_user.user_id,
+                Task.task_code.like(f"kg_{kg_week}_%"),
+            ),
+        ),
     ).order_by(Task.sort_order.asc()).all()
     weekly_views = [_task_view(t, current_user.user_id, db, slots.get(t.task_id, 0)) for t in weekly_tasks]
     # 置顶在前，其余按原排序
@@ -386,6 +446,15 @@ def _auto_claim_completed_tasks(current_user: SysUser, db: Session) -> list:
                 "title": task.title or task.description,
                 "reward_coins": reward,
             })
+
+    # 2026-11-15：学习计划每日任务（StudyGoal）同一套兜底。
+    # 单独一个 try：计划任务异常不能影响 badge_task 的发放与懒分配提交。
+    try:
+        from ....services.goal_task_reward import auto_claim_completed_goal_tasks
+
+        granted.extend(auto_claim_completed_goal_tasks(db, current_user, now=now))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("计划任务自动发放失败: %s", exc)
 
     db.commit()  # 没有发放时也要提交 _ensure_random_tasks 的懒分配
     return granted

@@ -71,6 +71,19 @@ backend/run_demo.py
 # 运行错误输出（*.log 已忽略，补 *.err）
 *.err
 
+# ---------- Obsidian 图谱知识库（2026-11-17）----------
+# 项目内落位：docs/obsidian/知识图谱自生长/ 由 scripts/kg_vault/export_kg_vault.py 每日重写，
+# 含每个用户独立的 .obsidian 配置与每日快照 —— 属生成物，不入库；需要留档时可单独 git add -f。
+docs/obsidian/知识图谱自生长/
+
+# ---------- 商品图抠像模型（BiRefNet，2026-11-18）----------
+# 权重 973MB（general）/ 224MB（lite），超过 GitHub 单文件 100MB 硬限制，禁止入库。
+# 默认放在 %USERPROFILE%/.rembg/models/（或 REMBG_HOME），由
+# scripts/shop/fetch_cutout_model.ps1（Windows）/ fetch_cutout_model.py（跨平台）下载。
+*.onnx
+**/.rembg/
+backend/data/models/
+
 # ---------- 数据库 / 运行时数据 ----------
 *.db
 *.sqlite

@@ -307,6 +307,24 @@
       pickImage() {
         if (this.$refs.fileInput) this.$refs.fileInput.click();
       },
+      /** 2026-11-18：异步抠像进度轮询（done / failed / 超时） */
+      async pollCutout(statusUrl: string, timeoutMs = 150000) {
+        const started = Date.now();
+        while (Date.now() - started < timeoutMs) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          try {
+            const r = await this.api(statusUrl);
+            const d = await r.json();
+            if (!r.ok) return { ok: false, error: d.detail || '状态查询失败' };
+            if (d.state === 'done') return { ok: true, engine: d.engine || '' };
+            if (d.state === 'failed') return { ok: false, error: d.error || '抠像失败' };
+          } catch (e) {
+            // 网络抖动继续轮询
+          }
+        }
+        return { ok: false, error: '抠像超时，请稍后刷新或重试' };
+      },
+
       async onPickImage(ev) {
         const file = ev.target.files && ev.target.files[0];
         if (!file) return;
@@ -321,6 +339,28 @@
             return;
           }
           this.state.form.image_url = d.url;
+
+          // 2026-11-18：异步队列——先显示占位图，后台抠完覆盖同一 URL
+          if (d.async && d.status_url) {
+            ElMessage.info('已上传，后台自动抠像中（约 10~20 秒）…');
+            const st = await this.pollCutout(d.status_url);
+            if (!st.ok) {
+              ElMessage.error('抠像失败：' + st.error);
+              return;
+            }
+            // 同一 URL 加时间戳绕过浏览器缓存，强制显示处理后的图
+            this.state.form.image_url = d.url + '?v=' + Date.now();
+            if (this.state.editingId) {
+              await this.api('/api/admin/shop/products/' + this.state.editingId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_url: d.url })
+              });
+            }
+            ElMessage.success('抠像完成' + (st.engine ? '（' + st.engine + '）' : '') + '，请确认预览');
+            return;
+          }
+
           if (this.state.editingId) {
             await this.api('/api/admin/shop/products/' + this.state.editingId, {
               method: 'PUT',
@@ -362,7 +402,8 @@
           category: f.category,
           coin_price: f.coin_price,
           stock: f.stock,
-          image_url: f.image_url,
+          // 预览可能带 ?v=时间戳（绕缓存），入库只存干净 URL
+          image_url: (f.image_url || '').split('?')[0],
           description: f.description,
           deliverable_type: f.deliverable_type,
           deliverable_payload: payload

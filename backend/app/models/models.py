@@ -2533,6 +2533,32 @@ class KgUserNodeState(Base):
     )
 
 
+class KgNodeLayout(Base):
+    """用户级图谱节点坐标（2026-11-15）。
+
+    为什么落库而不是 localStorage：PC / 平板 / 手机各自一份 localStorage，
+    换设备或清缓存布局就丢；写库后同一账号在任何设备都能回到自己的布局。
+
+    - mode：mine（个人图谱）/ global（全局图谱），两张图节点集合不同，必须分开存；
+    - x / y：svg 用户坐标（以质心为原点的力导向坐标系），与画布尺寸无关，故三端通用。
+    """
+
+    __tablename__ = "kg_node_layout"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("sys_user.user_id"), nullable=False, comment="用户ID")
+    mode = Column(String(16), default="mine", nullable=False, comment="图谱模式 mine/global")
+    point_id = Column(Integer, nullable=False, comment="知识点ID（不设外键：全局图谱节点可能被清理）")
+    x = Column(Float, default=0.0, nullable=False, comment="节点 x 坐标")
+    y = Column(Float, default=0.0, nullable=False, comment="节点 y 坐标")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "mode", "point_id", name="uk_kg_node_layout"),
+        Index("idx_kg_node_layout_user_mode", user_id, mode),
+    )
+
+
 class KgUserEdge(Base):
     """用户级知识边权重（自生长：边由用户行为动态新增/加权）。
 

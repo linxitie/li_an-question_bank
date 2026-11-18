@@ -204,7 +204,19 @@
         this.state.records = this.rewardStore.records;
       },
       async loadTasks() {
-        try { const r = await window.__VTJ_AUTH__.apiFetch('/api/tasks/overview'); const d = await r.json(); if (r.ok) this.state.tasks = d; } catch (e) {}
+        try {
+          const r = await window.__VTJ_AUTH__.apiFetch('/api/tasks/overview');
+          const d = await r.json();
+          if (r.ok) {
+            // 2026-11-17：知识图谱生成的周任务在标题前注明（.vtj 模板按 R3 不能改，改数据不碰模板）
+            (d.weekly || []).forEach((t: any) => {
+              if (t && t.is_kg_generated && !String(t.title).startsWith('【知识图谱生成】')) {
+                t.title = '【知识图谱生成】' + t.title;
+              }
+            });
+            this.state.tasks = d;
+          }
+        } catch (e) {}
       },
       async claimTask(t) {
         try {

@@ -551,9 +551,10 @@ def seed_tasks():
             ("rand_acc80", "random", "稳扎稳打", "今日正确率≥80%", "today_accuracy", 80, 25, 5),
             ("rand_streak3", "random", "坚持达人", "连续签到3天", "streak_days", 3, 30, 6),
             # 周常任务
-            ("week_300", "weekly", "做题达人", "本周完成300道题", "week_questions", 300, 80, 1),
-            ("week_acc85", "weekly", "正确率之星", "本周正确率≥85%", "week_accuracy", 85, 70, 2),
-            ("week_checkin7", "weekly", "签到全勤", "连续签到7天", "streak_days", 7, 100, 3),
+            # 2026-11-17：周任务基础金币下调（80/70/100 → 30），与 seed_weekly_tasks 口径一致
+            ("week_300", "weekly", "做题达人", "本周完成300道题", "week_questions", 300, 30, 1),
+            ("week_acc85", "weekly", "正确率之星", "本周正确率≥85%", "week_accuracy", 85, 30, 2),
+            ("week_checkin7", "weekly", "签到全勤", "连续签到7天", "streak_days", 7, 30, 3),
         ]
         created = 0
         for code, ttype, title, desc, metric, th, reward, order in tasks:

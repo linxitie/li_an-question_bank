@@ -44,6 +44,8 @@ export interface ModerationPost {
   isTop?: boolean;
   /** 置顶到期时间（null = 永久） */
   pinUntil?: string | null;
+  /** 当前账号能否置顶这条帖子（教师端列表后端已算好） */
+  canPin?: boolean | null;
   isEssence?: boolean;
   viewCount?: number;
   createTime?: string | null;
@@ -103,7 +105,13 @@ export const teacherForumApi = {
   hidePost: (postId: number, reason: string) =>
     post<{ success: boolean }>(`/api/teacher/forum/posts/${postId}/hide`, { reason }),
   hideComment: (commentId: number, reason: string) =>
-    post<{ success: boolean }>(`/api/teacher/forum/comments/${commentId}/hide`, { reason })
+    post<{ success: boolean }>(`/api/teacher/forum/comments/${commentId}/hide`, { reason }),
+  /** 置顶 / 取消置顶：days 为置顶天数，0/省略 = 永久（与管理端同一套语义） */
+  pinPost: (postId: number, pinned: boolean, days?: number) =>
+    post<{ success: boolean; isTop: boolean; pinUntil: string | null }>(
+      `/api/teacher/forum/posts/${postId}/pin`,
+      days === undefined ? { pinned } : { pinned, days }
+    )
 };
 
 export const adminForumApi = {

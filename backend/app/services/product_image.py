@@ -1,9 +1,13 @@
-"""商品图处理（2026-11-05）：自动抠像 + 白底 + 清晰度校验。
+"""商品图处理（2026-11-05，2026-11-18 升级）：抠像 + 白底 + 清晰度校验。
 
-为什么不用 rembg 这类深度学习抠图：环境里没有模型权重，首次使用要联网下载上百 MB，
-在离线/受限网络下会直接失败。这里用**边缘洪泛抠像**：
-从图片四边向内扩散，把与边缘颜色相近的像素设为透明，再把主体合成到白底上。
-适用于"商品摆拍 + 纯色/浅色背景"的常见情况，失败时会提示管理员重传。
+抠像引擎（按优先级）：
+1. **BiRefNet**（深度学习，rembg 调用）：商品边缘/透明材质保留最好，默认用 birefnet-general；
+   模型权重约 973MB，放在 %USERPROFILE%\.rembg\models\birefnet-general\；
+2. GrabCut（OpenCV，本地算法）：BiRefNet 不可用/失败时的兜底；
+3. 边缘洪泛：最后兜底（纯色背景）。
+
+为什么 auto 模式不自动下载权重：900MB+ 在管理员上传请求里下载会让请求卡死几分钟；
+部署时预先下载（scripts/shop/fetch_cutout_model.ps1），没有权重就自动走经典算法。
 
 清晰度校验用拉普拉斯方差（越小越糊），低于阈值直接拒绝，满足"照片不清晰要求重传"。
 """
@@ -11,11 +15,14 @@ from __future__ import annotations
 
 import io
 import logging
+import os
+import threading
+import time
 import uuid
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +38,152 @@ MIN_SHARPNESS = 15.0
 # 背景相似度容差（RGB 欧氏距离）
 BG_TOLERANCE = 42
 OUTPUT_SIZE = 600
+
+# ===== BiRefNet 深度学习抠图（2026-11-18）=====
+# SHOP_CUTOUT_ENGINE: auto（默认，有模型就用）/ birefnet（强制，失败即报错）/ classic（本地算法）
+# SHOP_CUTOUT_MODEL: birefnet-general（质量最好）/ birefnet-general-lite（快，但实测对书本类商品会错位）
+# SHOP_CUTOUT_ALLOW_DOWNLOAD=1 时允许首次上传时在线下载权重（默认禁止）
+CUTOUT_ENGINE = os.getenv("SHOP_CUTOUT_ENGINE", "auto").strip().lower()
+CUTOUT_MODEL = os.getenv("SHOP_CUTOUT_MODEL", "birefnet-general").strip()
+CUTOUT_MAX_INPUT = int(os.getenv("SHOP_CUTOUT_MAX_INPUT", "1024"))
+CUTOUT_THREADS = int(os.getenv("SHOP_CUTOUT_THREADS", str(min(16, os.cpu_count() or 4))))
+# 异步队列：上传立即返回占位图，后台线程抠完覆盖同一个文件（默认开启；SHOP_CUTOUT_ASYNC=0 关闭）
+ASYNC_ENABLED = os.getenv("SHOP_CUTOUT_ASYNC", "1").strip() not in ("0", "false", "no", "off")
+
+# 任务状态：key = 文件名（与 /api/shop/images/<name> 一致）
+_JOB_LOCK = threading.Lock()
+_JOBS: dict[str, dict] = {}
+_EXECUTOR = None
+_EXECUTOR_LOCK = threading.Lock()
+
+
+def _executor():
+    global _EXECUTOR
+    if _EXECUTOR is None:
+        with _EXECUTOR_LOCK:
+            if _EXECUTOR is None:
+                from concurrent.futures import ThreadPoolExecutor
+
+                # 抠像是 CPU 密集且会话常驻约 1GB，串行处理最稳；队列让上传立即返回
+                _EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="shop-cutout")
+    return _EXECUTOR
+
+
+def _job_snapshot(name: str) -> dict | None:
+    with _JOB_LOCK:
+        job = _JOBS.get(name)
+        return dict(job) if job else None
+
+
+def _job_update(name: str, **fields) -> None:
+    with _JOB_LOCK:
+        job = _JOBS.setdefault(name, {})
+        job.update(fields)
+        job["updated_at"] = time.time()
+
+
+def _placeholder_image(text: str) -> Image.Image:
+    """占位图：白底 + 灰色提示文字（用默认字体，避免服务器缺中文字体）。"""
+    canvas = Image.new("RGB", (OUTPUT_SIZE, OUTPUT_SIZE), (255, 255, 255))
+    draw = ImageDraw.Draw(canvas)
+    # 简单的灰框 + 文字，明确这是"处理中"
+    draw.rectangle((18, 18, OUTPUT_SIZE - 18, OUTPUT_SIZE - 18), outline=(226, 232, 240), width=4)
+    draw.text((OUTPUT_SIZE // 2 - 52, OUTPUT_SIZE // 2 - 8), text, fill=(148, 163, 184))
+    return canvas
+
+
+def _write_placeholder(path: Path, text: str = "AI processing...") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _placeholder_image(text).save(path, format="PNG", optimize=True)
+
+_ai_session = None
+_ai_lock = threading.Lock()
+_ai_ready_cache: bool | None = None
+
+
+def cutout_engine() -> str:
+    """当前实际可用的引擎：birefnet / classic。"""
+    return "birefnet" if _birefnet_ready() else "classic"
+
+
+def _birefnet_ready() -> bool:
+    """rembg 可导入 + 权重已在本机（auto 模式绝不在这里触发下载）。"""
+    global _ai_ready_cache
+    if _ai_ready_cache is not None:
+        return _ai_ready_cache
+    ready = False
+    if CUTOUT_ENGINE != "classic":
+        try:
+            import rembg  # noqa: F401
+
+            if os.getenv("SHOP_CUTOUT_ALLOW_DOWNLOAD") == "1":
+                ready = True
+            else:
+                from rembg.sessions import sessions_class
+
+                cls = next(c for c in sessions_class if c.name() == CUTOUT_MODEL)
+                model_dir = Path(cls.model_dir())
+                ready = model_dir.is_dir() and any(model_dir.glob("*.onnx"))
+        except Exception:  # noqa: BLE001
+            ready = False
+    _ai_ready_cache = ready
+    return ready
+
+
+def _session_options():
+    import onnxruntime as ort
+
+    opts = ort.SessionOptions()
+    opts.intra_op_num_threads = max(1, CUTOUT_THREADS)
+    opts.inter_op_num_threads = 1
+    opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    return opts
+
+
+def _birefnet_session():
+    global _ai_session
+    if _ai_session is not None:
+        return _ai_session
+    with _ai_lock:
+        if _ai_session is None:
+            from rembg import new_session
+
+            _ai_session = new_session(CUTOUT_MODEL, sess_opts=_session_options())
+    return _ai_session
+
+
+def warmup_background() -> None:
+    """后端启动时后台预热模型（首次加载 ONNX 会话约 5~50s，不能让首个上传请求等）。"""
+    if not _birefnet_ready():
+        return
+
+    def _run() -> None:
+        try:
+            t0 = time.time()
+            _birefnet_session()
+            logger.info("BiRefNet 模型预热完成（%s，%.1fs）", CUTOUT_MODEL, time.time() - t0)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("BiRefNet 预热失败，将继续用经典算法兜底: %s", exc)
+
+    threading.Thread(target=_run, daemon=True, name="shop-cutout-warmup").start()
+
+
+def _remove_background_birefnet(img: Image.Image) -> Image.Image:
+    """BiRefNet 抠像：内部固定 1024 输入，大图先缩到 1024 再推理，最后放回原尺寸。"""
+    from rembg import remove as rembg_remove
+
+    session = _birefnet_session()
+    work = img.convert("RGB")
+    scale = min(1.0, CUTOUT_MAX_INPUT / max(work.size))
+    if scale < 1.0:
+        work = work.resize(
+            (max(1, int(work.width * scale)), max(1, int(work.height * scale))),
+            Image.LANCZOS,
+        )
+    cut = rembg_remove(work, session=session)
+    if cut.size != img.size:
+        cut = cut.resize(img.size, Image.LANCZOS)
+    return cut
 
 
 def _sharpness(img: Image.Image) -> float:
@@ -50,13 +203,28 @@ def _sharpness(img: Image.Image) -> float:
     return float(lap[1:-1, 1:-1].var())
 
 
-def _remove_background(img: Image.Image, tolerance: int = BG_TOLERANCE) -> Image.Image:
-    """抠像主入口：优先 GrabCut（能处理纹理背景与阴影），失败退回边缘洪泛。"""
+def _remove_background(img: Image.Image, tolerance: int = BG_TOLERANCE):
+    """抠像主入口：BiRefNet → GrabCut → 洪泛。
+
+    返回 (RGBA 图, 实际使用的引擎名)，供上层决定是否再做灰度阴影抑制
+    （BiRefNet 已经输出干净 alpha，再做阴影抑制反而可能吃掉白色书页）。
+    """
+    if CUTOUT_ENGINE in ("auto", "birefnet") and _birefnet_ready():
+        t0 = time.time()
+        try:
+            rgba = _remove_background_birefnet(img)
+            logger.info("抠图引擎 BiRefNet(%s) %.2fs", CUTOUT_MODEL, time.time() - t0)
+            return rgba, "birefnet"
+        except Exception as exc:  # noqa: BLE001
+            if CUTOUT_ENGINE == "birefnet":
+                raise RuntimeError(f"BiRefNet 抠图失败：{exc}") from exc
+            logger.warning("BiRefNet 抠图失败，退回经典算法: %s", exc)
+
     try:
-        return _remove_background_grabcut(img)
+        return _remove_background_grabcut(img), "grabcut"
     except Exception as exc:  # noqa: BLE001
         logger.warning("GrabCut 抠像失败，退回洪泛抠像: %s", exc)
-        return _remove_background_flood(img, tolerance)
+        return _remove_background_flood(img, tolerance), "flood"
 
 
 def _largest_component(mask: np.ndarray) -> np.ndarray:
@@ -256,10 +424,55 @@ def _compose_white(rgba: Image.Image, size: int = OUTPUT_SIZE) -> Image.Image:
     return canvas.convert("RGB")
 
 
-def process_product_image(raw: bytes) -> dict:
+def _render_cutout(raw: bytes, img: Image.Image) -> tuple[Image.Image, str]:
+    """同步执行抠像 + 白底合成，返回 (600×600 结果, 引擎名)。"""
+    try:
+        rgba, engine = _remove_background(img)
+        if engine != "birefnet":
+            # 经典算法会把软阴影判成前景，需要额外抑制；BiRefNet 的 alpha 已干净
+            rgba = _suppress_gray_shadow(rgba)
+        return _compose_white(rgba), engine
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError("抠像失败，请换一张背景更干净的照片") from exc
+
+
+def _save_atomic(result: Image.Image, out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out_path.with_suffix(".tmp")
+    result.save(tmp, format="PNG", optimize=True)
+    os.replace(tmp, out_path)
+
+
+def _run_cutout_job(name: str, raw: bytes) -> None:
+    """后台队列任务：抠完覆盖占位图（同一个 URL，前台刷新即可看到结果）。"""
+    _job_update(name, state="running", started_at=time.time())
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img.load()
+        result, engine = _render_cutout(raw, img)
+        _save_atomic(result, SHOP_DIR / name)
+        _job_update(name, state="done", engine=engine, finished_at=time.time(), error=None)
+        logger.info("商品图异步抠像完成 %s（引擎 %s）", name, engine)
+    except Exception as exc:  # noqa: BLE001
+        _job_update(name, state="failed", error=str(exc), finished_at=time.time())
+        logger.warning("商品图异步抠像失败 %s: %s", name, exc)
+        try:
+            _write_placeholder(SHOP_DIR / name, "AI failed. Try again.")
+        except Exception:  # noqa: BLE001
+            logger.warning("占位图更新失败 %s", name)
+
+
+def image_job_status(name: str) -> dict | None:
+    """查询异步抠像任务状态；未知/已重启返回 None。"""
+    return _job_snapshot(name)
+
+
+def process_product_image(raw: bytes, async_mode: bool | None = None) -> dict:
     """处理上传的商品图：校验 → 扣背景 → 白底 → 落盘。
 
-    返回 {url, width, height, sharpness}；不清晰/尺寸不足时抛 ValueError。
+    默认异步（SHOP_CUTOUT_ASYNC=1）：先写占位图并立即返回，后台线程抠完覆盖同一 URL；
+    返回 {url, width, height, sharpness, engine, async?, status_url?}。
+    不清晰/尺寸不足时抛 ValueError。
     """
     if not raw:
         raise ValueError("没有收到图片文件")
@@ -279,22 +492,31 @@ def process_product_image(raw: bytes) -> dict:
     if score < MIN_SHARPNESS:
         raise ValueError("照片不够清晰，请重新拍摄/上传（注意对焦与光线）")
 
-    try:
-        rgba = _remove_background(img)
-        rgba = _suppress_gray_shadow(rgba)
-        result = _compose_white(rgba)
-    except Exception as exc:  # noqa: BLE001
-        raise ValueError("抠像失败，请换一张背景更干净的照片") from exc
-
     SHOP_DIR.mkdir(parents=True, exist_ok=True)
     name = f"{uuid.uuid4().hex}.png"
-    out_path = SHOP_DIR / name
-    result.save(out_path, format="PNG", optimize=True)
-
-    logger.info("商品图处理完成 %s（清晰度 %.1f）", name, score)
-    return {
+    base = {
         "url": f"{SHOP_URL_PREFIX}/{name}",
-        "width": result.width,
-        "height": result.height,
+        "width": OUTPUT_SIZE,
+        "height": OUTPUT_SIZE,
         "sharpness": round(score, 2),
     }
+
+    if async_mode is None:
+        async_mode = ASYNC_ENABLED
+
+    if async_mode:
+        _write_placeholder(SHOP_DIR / name)
+        _job_update(name, state="queued", engine="queued", started_at=time.time(), error=None)
+        _executor().submit(_run_cutout_job, name, raw)
+        logger.info("商品图已入队 %s（清晰度 %.1f），后台抠像中", name, score)
+        return {
+            **base,
+            "engine": "queued",
+            "async": True,
+            "status_url": f"/api/admin/shop/upload-image/{name}/status",
+        }
+
+    result, engine = _render_cutout(raw, img)
+    _save_atomic(result, SHOP_DIR / name)
+    logger.info("商品图处理完成 %s（引擎 %s，清晰度 %.1f）", name, engine, score)
+    return {**base, "engine": engine, "async": False}

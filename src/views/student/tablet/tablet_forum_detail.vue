@@ -1,4 +1,4 @@
-﻿<!-- 平板端论坛帖子详情页：独立整页，版式对齐 PC 详情卡 -->
+<!-- 平板端论坛帖子详情页：独立整页，版式对齐 PC 详情卡 -->
 <template>
   <div class="tablet-forum-detail">
     <header class="topbar">
@@ -14,7 +14,7 @@
       <article v-else class="detail-card">
         <div class="card-body">
           <div class="post-badges">
-            <span v-if="post.isTop" class="badge badge-top">置顶</span>
+            <span v-if="post.isTop" class="badge badge-top" :title="pinTitle(post.pinUntil)">置顶 {{ pinCountdown(post.pinUntil) }}</span>
             <span v-if="post.isEssence" class="badge badge-essence">精华</span>
           </div>
 
@@ -80,10 +80,7 @@
                     <span class="comment-time">{{ formatTime(c.createTime) }}</span>
                   </div>
                   <div class="comment-text"><ForumContent :content="c.content" /></div>
-                  <AttachmentList
-                    v-if="c.attachments && c.attachments.length"
-                    :attachments="c.attachments"
-                    mode="comment" />
+                  <!-- 2026-11-15：平板端不做评论附件汇总（与 PC 端一致） -->
                   <div class="comment-actions">
                     <button class="comment-like" type="button" @click="reactToComment(c, 'like')">
                       👍 {{ c.likeCount }}
@@ -109,10 +106,6 @@
                           <span class="comment-time">{{ formatTime(r.createTime) }}</span>
                         </div>
                         <div class="comment-text"><ForumContent :content="r.content" /></div>
-                        <AttachmentList
-                          v-if="r.attachments && r.attachments.length"
-                          :attachments="r.attachments"
-                          mode="comment" />
                       </div>
                     </div>
                   </div>
@@ -126,9 +119,6 @@
               回复 {{ replyToName }} ×
             </div>
 
-            <div class="composer-uploader">
-              <FileUploader v-model="commentImages" :max-docs="3" />
-            </div>
 
             <div v-if="showPicker" class="composer-picker">
               <EmojiStickerPicker @select="insertEmoji" @close="showPicker = false" />
@@ -163,11 +153,10 @@ import { ElMessage } from 'element-plus';
 import AttachmentList from '@/components/forum/AttachmentList.vue';
 import CommentSortBar from '@/components/forum/CommentSortBar.vue';
 import EmojiStickerPicker from '@/components/forum/EmojiStickerPicker.vue';
-import FileUploader from '@/components/forum/FileUploader.vue';
 import ForumContent from '@/components/forum/ForumContent.vue';
 import UserBadge from '@/components/forum/UserBadge.vue';
 import { titleColorValue } from '@/components/forum/titleColors';
-import type { ForumImageAttachment } from '@/components/forum/imageUtils';
+import { pinCountdown, pinTitle } from '@/components/forum/pinCountdown';
 import {
   pinForumComment,
   reportForumTarget,
@@ -281,7 +270,6 @@ const reportComment = async (comment: ForumCommentItem) => {
 };
 
 const commentText = ref('');
-const commentImages = ref<ForumImageAttachment[]>([]);
 const showPicker = ref(false);
 
 const insertEmoji = (payload: { type: 'emoji' | 'sticker'; value: string; name?: string }) => {
@@ -295,11 +283,9 @@ const submitComment = async () => {
   try {
     await store.submitComment(postId.value, {
       content,
-      parentCommentId: replyTo.value,
-      attachments: commentImages.value.length ? commentImages.value : undefined
+      parentCommentId: replyTo.value
     });
     commentText.value = '';
-    commentImages.value = [];
     cancelReply();
     ElMessage.success('评论成功');
   } catch (e) {
@@ -619,44 +605,10 @@ watch(() => route.params.id, () => { void load(); });
   z-index: 30;
 }
 
-.composer-uploader {
-  order: 2;
-  width: auto;
-  flex: 0 0 auto;
-}
-/* 单行：😊 → ＋ → 输入框 → 发送 */
+/* 单行：😊 → 输入框 → 发送 */
 .composer .emoji-btn { order: 1; }
 .composer .comment-input { order: 3; }
 .composer .send-btn { order: 4; }
-
-/* 上传按钮缩成 36×36 圆形「＋」；原文字视觉隐藏保留给读屏。
-   依赖 FileUploader 的 .fu-add / .fu-thumb 类名，改组件时需同步。 */
-.composer :deep(.fu-add) {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 50%;
-  font-size: 0;
-  position: relative;
-}
-.composer :deep(.fu-add::before) {
-  content: '+';
-  font-size: 20px;
-  line-height: 1;
-  color: #1a2b5f;
-}
-.composer :deep(.fu-add span) {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-.composer :deep(.fu-thumb) {
-  width: 36px;
-  height: 36px;
-}
 
 .composer-picker {
   position: absolute;

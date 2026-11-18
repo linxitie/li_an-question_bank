@@ -4,14 +4,14 @@
       <div>
         <h1>我的知识图谱</h1>
         <p class="kg-sub">
-          节点大小 = 生长热度，颜色区分知识点；图谱只反映你自己的学习轨迹。
+          节点大小 = 生长热度，颜色区分知识点；只看你自己的学习轨迹。
         </p>
       </div>
       <div class="kg-actions">
         <button class="kg-btn" :class="{ on: mode === 'mine' }" @click="mode = 'mine'; panelRef?.loadAll()">我的图谱</button>
         <button class="kg-btn" :class="{ on: mode === 'global' }" @click="mode = 'global'; panelRef?.loadAll()">全局图谱</button>
         <button class="kg-btn" :disabled="generating" @click="generateTasks">
-          {{ generating ? '生成中…' : '生成本周个性化任务' }}
+          {{ generating ? '生成中…' : '生成本周任务' }}
         </button>
         <button class="kg-btn" :class="{ on: view === '3d' }" @click="view = view === '3d' ? '2d' : '3d'">
           {{ view === '3d' ? '2D 视图' : '3D 星图' }}
@@ -29,7 +29,7 @@
         </header>
         <p class="kg-panel__meta">关联考点 {{ selected.degree }} 个</p>
         <div class="kg-panel__chips">
-          <button v-for="n in selected.neighbors" :key="n.rel + n.id"
+          <button v-for="n in selected.neighbors" :key="(n.rel || 'rel') + '-' + n.id"
                   class="kg-chip" :class="'rel-' + n.rel"
                   :title="relLabel(n.rel)"
                   @click="selected = { id: n.id, name: n.name, degree: 0, neighbors: [] }">

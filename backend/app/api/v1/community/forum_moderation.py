@@ -35,6 +35,14 @@ class ReasonPayload(BaseModel):
     reason: str = Field(..., min_length=1, max_length=200)
 
 
+class PinPayload(BaseModel):
+    """置顶载荷（教师端 / 管理员端共用，保证三端 DTO 一致）。"""
+
+    pinned: bool = True
+    # 置顶时长（天）：不传 / <=0 = 永久置顶；1/3/7/30 等由前端给出
+    days: Optional[int] = Field(None, ge=0, le=365)
+
+
 class ReviewPayload(BaseModel):
     note: Optional[str] = Field(None, max_length=200)
 
@@ -62,6 +70,59 @@ def _audit(
     )
 
 
+def _apply_pin(
+    db: Session,
+    post: ForumPost,
+    user: SysUser,
+    *,
+    pinned: bool,
+    days: Optional[int],
+    audit_label: str,
+) -> Dict[str, Any]:
+    """置顶 / 取消置顶的唯一实现（教师端与管理员端共用）。
+
+    - days > 0：置顶到 now + days，到期由 `services.forum_pin` 的 10 分钟调度自动取消；
+    - days 缺省 / <=0：永久置顶（pin_until = NULL）；
+    - pinned=False：取消置顶。
+    """
+    now = datetime.now()
+    if pinned:
+        span = int(days or 0)
+        post.is_top = 1
+        post.pin_until = now + timedelta(days=span) if span > 0 else None
+        detail = f"post_id={post.post_id}, duration={'永久' if span <= 0 else f'{span}天'}"
+    else:
+        span = 0
+        post.is_top = 0
+        post.pin_until = None
+        detail = f"post_id={post.post_id}, duration=取消"
+    _audit(db, user, audit_label, detail)
+    db.commit()
+    db.refresh(post)
+    return {
+        "success": True,
+        "isTop": bool(post.is_top),
+        "pinUntil": post.pin_until.isoformat() if post.pin_until else None,
+        "pinDays": span,
+    }
+
+
+def _can_pin_post(
+    db: Session, user: SysUser, post: ForumPost, author: Optional[SysUser] = None
+) -> bool:
+    """教师可置顶自己的帖子与本班学生的帖子；管理员不限。
+
+    `author` 由列表接口传入时不再按条查库，避免 50 条列表打出 50 次 SELECT。
+    """
+    if user.user_type == "admin":
+        return True
+    if post.user_id == user.user_id:
+        return True
+    if author is None:
+        author = db.query(SysUser).filter(SysUser.user_id == post.user_id).first()
+    return is_my_student(db, user, author)
+
+
 # 班级范围查询已下沉：from ....services.class_scope import teacher_class_names, is_my_student
 # 原因：本文件此前直接 import platform 域的 Banji 模型，触发边界门禁 cross_write 违规。
 
@@ -72,6 +133,7 @@ def _post_item(
     *,
     can_delete: bool,
     moderation_status: Optional[str] = None,
+    can_pin: Optional[bool] = None,
 ) -> Dict[str, Any]:
     data = _serialize_post(post, author)
     data.update(
@@ -82,6 +144,8 @@ def _post_item(
             "deletedAt": post.deleted_at.isoformat() if post.deleted_at else None,
             "moderationStatus": moderation_status,
             "canDelete": can_delete,
+            # 是否可置顶（教师端据此决定是否显示置顶按钮，管理员端恒为 True）
+            "canPin": can_pin,
             "author": (author.nickname or author.username) if author else "匿名",
             "authorAvatar": author.avatar if author else "",
             "authorClass": author.class_name if author else None,
@@ -196,6 +260,7 @@ async def teacher_posts(
                 post,
                 author,
                 can_delete=admin_view or is_my_student(db, current_user, author),
+                can_pin=_can_pin_post(db, current_user, post, author),
             )
         )
     return {
@@ -320,6 +385,33 @@ async def hide_comment(
     return {"success": True, "moderation_id": moderation.id}
 
 
+@teacher_router.post("/posts/{post_id}/pin", summary="教师置顶/取消置顶帖子（可选时长）")
+async def teacher_pin_post(
+    post_id: int,
+    payload: PinPayload,
+    current_user: SysUser = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """教师端置顶：与管理端同一套 days 语义（1/3/7/30/永久），到期自动取消。
+
+    权限：自己的帖子 / 本班学生的帖子；管理员不限。此前教师端只能通过发帖时的
+    布尔置顶落到「永久」，无法选择时长，也没有调整入口。
+    """
+    post = db.query(ForumPost).filter(ForumPost.post_id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="帖子不存在")
+    if not _can_pin_post(db, current_user, post):
+        raise HTTPException(status_code=403, detail="只能置顶自己的帖子或本班学生的帖子")
+    return _apply_pin(
+        db,
+        post,
+        current_user,
+        pinned=payload.pinned,
+        days=payload.days,
+        audit_label="教师置顶帖子" if payload.pinned else "教师取消置顶帖子",
+    )
+
+
 # ============================== 管理员端 ==============================
 
 @admin_router.get("/posts", summary="管理员端帖子列表")
@@ -395,6 +487,7 @@ async def admin_posts(
                 p,
                 user_map.get(p.user_id),
                 can_delete=True,
+                can_pin=True,
                 moderation_status=(
                     _latest_moderation_status(db, "POST", p.post_id).status
                     if _latest_moderation_status(db, "POST", p.post_id)
@@ -911,12 +1004,6 @@ async def admin_batch_posts(
     return {"success": True, "affected": affected, "skipped": skipped}
 
 
-class PinPayload(BaseModel):
-    pinned: bool = True
-    # 置顶时长（天）：不传 / <=0 = 永久置顶；1/3/7/30 等由前端给出
-    days: Optional[int] = Field(None, ge=0, le=365)
-
-
 @admin_router.post("/posts/{post_id}/pin", summary="管理员置顶/取消置顶帖子")
 async def admin_pin_post(
     post_id: int,
@@ -927,28 +1014,14 @@ async def admin_pin_post(
     post = db.query(ForumPost).filter(ForumPost.post_id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="帖子不存在")
-    now = datetime.now()
-    if payload.pinned:
-        days = int(payload.days or 0)
-        post.is_top = 1
-        post.pin_until = now + timedelta(days=days) if days > 0 else None
-        detail = f"post_id={post_id}, duration={'永久' if days <= 0 else f'{days}天'}"
-    else:
-        post.is_top = 0
-        post.pin_until = None
-        detail = f"post_id={post_id}, duration=取消"
-    _audit(
+    return _apply_pin(
         db,
+        post,
         current_user,
-        "管理员置顶帖子" if payload.pinned else "管理员取消置顶帖子",
-        detail,
+        pinned=payload.pinned,
+        days=payload.days,
+        audit_label="管理员置顶帖子" if payload.pinned else "管理员取消置顶帖子",
     )
-    db.commit()
-    return {
-        "success": True,
-        "isTop": bool(post.is_top),
-        "pinUntil": post.pin_until.isoformat() if post.pin_until else None,
-    }
 
 
 # =====================================================================

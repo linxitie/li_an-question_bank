@@ -64,6 +64,15 @@ pytest-cov>=4.1.0
 # paddleocr>=3.6.0
 Pillow>=10.0.0
 
+# ==================== 商品图深度学习抠像（rembg + BiRefNet，2026-11-18） ====================
+# rembg 2.0.87 自带 birefnet-general / birefnet-general-lite 会话，onnxruntime 为 CPU 推理后端。
+# 权重约 973MB（general）/ 224MB（lite），不入库：scripts/shop/fetch_cutout_model.ps1 预下载到
+# %USERPROFILE%/.rembg/models/<会话名>/。缺失时 product_image 自动退回 GrabCut。
+rembg==2.0.87
+onnxruntime>=1.23.2,<2.0
+# rembg 要求 Pillow>=12.3；固定 12.x，避免 Pillow 13 的破坏性变更
+Pillow>=12.3.0,<13.0.0
+
 # ==================== 题目图片无关性检测（image_filters.py，二维码解码） ====================
 opencv-python>=4.8.0
 

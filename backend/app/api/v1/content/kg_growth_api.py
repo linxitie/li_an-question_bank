@@ -9,15 +9,24 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from datetime import datetime
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_admin, get_current_user
-from ....models.models import KgEdge, KgUserEdge, KgUserNodeState, KnowledgePoint, SysUser
+from ....models.models import (
+    KgEdge,
+    KgNodeLayout,
+    KgUserEdge,
+    KgUserNodeState,
+    KnowledgePoint,
+    SysUser,
+)
 from ....services import kg_growth
 from ....services import kg_habits
 
@@ -145,6 +154,96 @@ async def generate(
             for t in tasks
         ],
     }
+
+
+# ------------------------- 节点坐标持久化（2026-11-15） -------------------------
+
+
+class KgLayoutNode(BaseModel):
+    point_id: int
+    x: float
+    y: float
+
+
+class KgLayoutPayload(BaseModel):
+    """拖拽后的节点坐标。reset=True 表示「双击复位」，清空该模式的全部坐标。"""
+
+    mode: str = Field("mine", pattern="^(mine|global)$")
+    nodes: List[KgLayoutNode] = Field(default_factory=list)
+    reset: bool = False
+
+
+@router.get("/layout", summary="我的图谱节点坐标（mine/global）")
+async def get_layout(
+    mode: str = Query("mine", pattern="^(mine|global)$"),
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """返回该用户在该模式下手动摆放过的节点坐标；没有拖拽过的节点不在返回里。"""
+    rows = (
+        db.query(KgNodeLayout)
+        .filter(KgNodeLayout.user_id == current_user.user_id, KgNodeLayout.mode == mode)
+        .all()
+    )
+    return {
+        "mode": mode,
+        "total": len(rows),
+        "nodes": [
+            {"point_id": r.point_id, "x": round(r.x, 3), "y": round(r.y, 3)} for r in rows
+        ],
+    }
+
+
+@router.put("/layout", summary="保存图谱节点坐标（拖拽后写回 / 双击复位）")
+async def put_layout(
+    payload: KgLayoutPayload,
+    current_user: SysUser = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """幂等 upsert：(user_id, mode, point_id) 唯一，重复保存只更新坐标。
+
+    只写用户自己名下，不接受 user_id 参数，避免越权改别人的布局。
+    """
+    base = db.query(KgNodeLayout).filter(
+        KgNodeLayout.user_id == current_user.user_id,
+        KgNodeLayout.mode == payload.mode,
+    )
+    if payload.reset:
+        deleted = base.delete(synchronize_session=False)
+        db.commit()
+        return {"success": True, "mode": payload.mode, "reset": True, "deleted": deleted, "saved": 0}
+
+    if not payload.nodes:
+        raise HTTPException(status_code=400, detail="nodes 不能为空；清空布局请传 reset=true")
+    if len(payload.nodes) > 3000:
+        raise HTTPException(status_code=400, detail="单次最多保存 3000 个节点坐标")
+
+    existing = {row.point_id: row for row in base.all()}
+    now = datetime.now()
+    for item in payload.nodes:
+        row = existing.get(item.point_id)
+        if row is not None:
+            row.x = float(item.x)
+            row.y = float(item.y)
+            row.updated_at = now
+        else:
+            db.add(
+                KgNodeLayout(
+                    user_id=current_user.user_id,
+                    mode=payload.mode,
+                    point_id=item.point_id,
+                    x=float(item.x),
+                    y=float(item.y),
+                    updated_at=now,
+                )
+            )
+    db.commit()
+    total = (
+        db.query(KgNodeLayout)
+        .filter(KgNodeLayout.user_id == current_user.user_id, KgNodeLayout.mode == payload.mode)
+        .count()
+    )
+    return {"success": True, "mode": payload.mode, "reset": False, "saved": len(payload.nodes), "total": total}
 
 
 @router.get("/global", summary="全局知识图谱（全部知识点 + 聚合关系边）")
