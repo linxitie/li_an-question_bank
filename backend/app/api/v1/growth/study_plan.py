@@ -47,8 +47,9 @@ MAX_TASKS = 200
 
 class AdjustRequest(BaseModel):
     instruction: str = Field(
-        ..., min_length=1, max_length=300, description="调整要求（如：多留时间给公专）"
+        "", max_length=300, description="调整要求（如：多留时间给公专）；撤销时可为空"
     )
+    undo: bool = Field(False, description="true=撤销最近一次已应用的调整（同一端点，不新增路由）")
 
 
 class GenerateRequest(BaseModel):
@@ -244,7 +245,7 @@ async def adjust_plan(
 ):
     """读取当前计划+今日任务+画像 → LLM 生成调整建议 → 落 PlanAdjustment + 更新 plan_meta.summary"""
     instruction = req.instruction
-    if not instruction or not instruction.strip():
+    if not getattr(req, "undo", False) and (not instruction or not instruction.strip()):
         raise HTTPException(status_code=400, detail="请说明你想怎么调整")
 
     # 1. 取当前计划（最新 plan_id）
@@ -290,15 +291,40 @@ async def adjust_plan(
             f"每日{profile.daily_hours}小时"
         )
 
-    # 4. 拼 prompt → LLM
+    # 4. 撤销通道（不新增端点：同一 POST，body 里 undo=true）
+    if getattr(req, "undo", False):
+        return _undo_last_adjustment(db, current_user.user_id, plan_id, meta)
+
+    # 5. 拼 prompt → LLM：要求输出"受限变更指令"，而不是只给一句话
+    plan_rows = (
+        db.query(StudyGoal)
+        .filter(
+            StudyGoal.user_id == current_user.user_id,
+            StudyGoal.plan_id == plan_id,
+            StudyGoal.status == 1,
+        )
+        .order_by(StudyGoal.sort_order.asc())
+        .all()
+    )
+    tasks_brief = [
+        {"goal_id": t.goal_id, "title": t.title, "date": t.task_date, "minutes": t.expected_minutes}
+        for t in plan_rows[:30]
+    ]
     adjust_input = (
         f"现有备考计划摘要：{meta.get('summary', '')}\n"
         f"阶段规划：{json.dumps(meta.get('phases', []), ensure_ascii=False)[:300]}\n"
+        f"现有任务（最多30条）：{json.dumps(tasks_brief, ensure_ascii=False)[:1200]}\n"
         f"今日任务（{len(today_rows)}项，已完成{done}项）：{'；'.join(today_titles)}\n"
         f"{profile_line}\n"
         f"用户要求调整：{instruction}\n"
-        '请给出调整后的计划。只输出 JSON：{"summary": "调整后的计划摘要（100字内）", '
-        '"adjustments": ["具体调整点1", "调整点2", ...]}。调整要具体可落地。'
+        "请只输出 JSON：{\"summary\": \"调整后方案摘要（100字内）\", \"ops\": [ ... ]}，ops 最多 8 条，"
+        "每条只能是下列之一：\n"
+        '{"op":"add","title":"任务标题","date":"YYYY-MM-DD","minutes":40}\n'
+        '{"op":"move","goal_id":123,"to":"YYYY-MM-DD"}\n'
+        '{"op":"modify","goal_id":124,"minutes":45}\n'
+        '{"op":"remove","goal_id":125}\n'
+        "约束：date/to 必须是今天起 30 天内；改期只动未完成任务；不得编造 goal_id；"
+        "若用户要求不明确，只给 summary、ops 给空数组。"
     )
     try:
         raw = await llm_client.chat_plan(adjust_input)
@@ -317,37 +343,268 @@ async def adjust_plan(
         raise HTTPException(status_code=502, detail="AI 调整失败，请重试")
     if not isinstance(plan, dict):
         raise HTTPException(status_code=502, detail="AI 返回格式异常，请重试")
-    new_summary = str(plan.get("summary", ""))[:200]
-    adjustments = plan.get("adjustments", [])
-    if not isinstance(adjustments, list):
-        adjustments = []
-    adjustments = [str(a)[:200] for a in adjustments[:10]]
 
-    # 5. 落 PlanAdjustment + 应用到计划（更新 summary）
+    new_summary = str(plan.get("summary", ""))[:200]
+    ops = plan.get("ops", [])
+    if not isinstance(ops, list):
+        ops = []
+    ops = ops[:8]
+
+    # 6. 事务应用：变更 + 快照（供撤销）+ 排课重算
+    applied, snapshot, rejected = _apply_adjust_ops(
+        db, current_user.user_id, plan_id, plan_rows, ops
+    )
+    meta["summary"] = new_summary or meta.get("summary", "")
+    meta["adjust_times"] = int(meta.get("adjust_times", 0)) + 1
+    meta["last_adjust_at"] = datetime.now().isoformat(timespec="seconds")
+    db.query(StudyGoal).filter(StudyGoal.plan_id == plan_id, StudyGoal.status == 1).update(
+        {StudyGoal.plan_meta: json.dumps(meta, ensure_ascii=False)}
+    )
     record = PlanAdjustment(
         user_id=current_user.user_id,
         plan_id=plan_id,
         reason=instruction.strip()[:300],
         adjustment=json.dumps(
-            {"summary": new_summary, "adjustments": adjustments}, ensure_ascii=False
+            {"summary": new_summary, "ops": ops, "applied": applied, "snapshot": snapshot},
+            ensure_ascii=False,
         ),
         apply_flag=1,
     )
     db.add(record)
-    if new_summary:
-        meta["summary"] = new_summary
-        meta["adjust_times"] = int(meta.get("adjust_times", 0)) + 1
-        db.query(StudyGoal).filter(StudyGoal.plan_id == plan_id, StudyGoal.status == 1).update(
-            {StudyGoal.plan_meta: json.dumps(meta, ensure_ascii=False)}
-        )
     db.commit()
     db.refresh(record)
+
+    # 变更后重算排课（任务/日期变了）
+    schedule_recomputed = False
+    try:
+        refreshed = (
+            db.query(StudyGoal)
+            .filter(
+                StudyGoal.user_id == current_user.user_id,
+                StudyGoal.plan_id == plan_id,
+                StudyGoal.status == 1,
+            )
+            .order_by(StudyGoal.sort_order.asc())
+            .all()
+        )
+        if refreshed:
+            _ensure_schedule(db, current_user.user_id, plan_id, refreshed, meta)
+            schedule_recomputed = True
+    except Exception as exc:  # noqa: BLE001 - 排课失败不影响调整结果
+        logger.warning("调整后重算排课失败: %s", exc)
 
     return {
         "adjust_id": record.adjust_id,
         "summary": new_summary,
-        "adjustments": adjustments,
-        "message": "已按你的要求调整计划并应用" if new_summary else "调整建议已生成",
+        "applied": applied,
+        "rejected": rejected,
+        "applied_count": len(applied),
+        "schedule_recomputed": schedule_recomputed,
+        "message": f"已应用 {len(applied)} 项调整" if applied else "AI 只给了建议，未改动任务",
+        "undoable": bool(applied),
+    }
+
+
+# ---------- P2：调整指令的校验、应用与撤销 ----------
+_VALID_OPS = {"add", "move", "modify", "remove"}
+
+
+def _recent_adjustments(db: Session, user_id: int, plan_id: int, limit: int = 3) -> list:
+    """最近几条调整记录（供前端展示"本次调整了什么"，退出重进也能看到）。"""
+    rows = (
+        db.query(PlanAdjustment)
+        .filter(PlanAdjustment.user_id == user_id, PlanAdjustment.plan_id == plan_id)
+        .order_by(PlanAdjustment.adjust_id.desc())
+        .limit(limit)
+        .all()
+    )
+    out = []
+    for r in rows:
+        try:
+            payload = json.loads(r.adjustment or "{}")
+        except ValueError:
+            payload = {}
+        applied = payload.get("applied") or payload.get("reverted") or []
+        out.append(
+            {
+                "adjust_id": r.adjust_id,
+                "reason": r.reason,
+                "applied": bool(r.apply_flag == 1),
+                "summary": payload.get("summary", ""),
+                "changes": applied[:8],
+                "change_count": len(applied),
+                "undo_of": payload.get("undo_of"),
+                "created_at": r.create_time.isoformat() if getattr(r, "create_time", None) else None,
+            }
+        )
+    return out
+
+
+def _parse_day(value) -> str | None:
+    try:
+        day = datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+    today = datetime.now().date()
+    if day < today or (day - today).days > 30:
+        return None
+    return day.strftime("%Y-%m-%d")
+
+
+def _apply_adjust_ops(db: Session, user_id: int, plan_id: int, tasks, ops) -> tuple:
+    """按受限指令修改 study_goal；返回 (applied, snapshot, rejected)。"""
+    by_id = {t.goal_id: t for t in tasks}
+    applied, snapshot, rejected = [], [], []
+    next_sort = (max((t.sort_order or 0) for t in tasks) + 1) if tasks else 0
+    meta_template = tasks[0].plan_meta if tasks else None
+
+    for raw_op in ops:
+        if not isinstance(raw_op, dict):
+            rejected.append({"op": str(raw_op)[:40], "why": "不是对象"})
+            continue
+        op = str(raw_op.get("op") or "").strip().lower()
+        if op not in _VALID_OPS:
+            rejected.append({"op": op or "?", "why": "未知指令"})
+            continue
+
+        if op == "add":
+            title = str(raw_op.get("title") or "").strip()[:200]
+            day = _parse_day(raw_op.get("date"))
+            minutes = int(raw_op.get("minutes") or 30)
+            if not title or not day:
+                rejected.append({"op": "add", "why": "标题或日期不合法"})
+                continue
+            minutes = max(10, min(120, minutes))
+            goal = StudyGoal(
+                user_id=user_id,
+                title=title,
+                target_count=0,
+                plan_id=plan_id,
+                sort_order=next_sort,
+                task_date=day,
+                expected_minutes=minutes,
+                is_completed=0,
+                status=1,
+                plan_meta=meta_template,
+            )
+            db.add(goal)
+            db.flush()
+            next_sort += 1
+            snapshot.append({"op": "add", "goal_id": goal.goal_id})
+            applied.append({"op": "add", "goal_id": goal.goal_id, "title": title, "date": day, "minutes": minutes})
+            continue
+
+        goal_id = raw_op.get("goal_id")
+        goal = by_id.get(goal_id) if isinstance(goal_id, int) else None
+        if goal is None:
+            rejected.append({"op": op, "why": f"任务不存在或不属于本计划: {goal_id}"})
+            continue
+
+        if op == "move":
+            day = _parse_day(raw_op.get("to"))
+            if not day:
+                rejected.append({"op": "move", "goal_id": goal_id, "why": "目标日期不合法"})
+                continue
+            if goal.is_completed == 1:
+                rejected.append({"op": "move", "goal_id": goal_id, "why": "已完成任务不改期"})
+                continue
+            snapshot.append({"op": "move", "goal_id": goal.goal_id, "from": goal.task_date})
+            applied.append({"op": "move", "goal_id": goal.goal_id, "title": goal.title, "from": goal.task_date, "to": day})
+            goal.task_date = day
+        elif op == "modify":
+            minutes = int(raw_op.get("minutes") or 0)
+            if minutes <= 0:
+                rejected.append({"op": "modify", "goal_id": goal_id, "why": "时长不合法"})
+                continue
+            old = int(goal.expected_minutes or 0)
+            minutes = max(10, min(120, minutes))
+            snapshot.append({"op": "modify", "goal_id": goal.goal_id, "minutes_from": old})
+            applied.append({"op": "modify", "goal_id": goal.goal_id, "title": goal.title, "minutes_from": old, "minutes_to": minutes})
+            goal.expected_minutes = minutes
+        elif op == "remove":
+            snapshot.append({"op": "remove", "goal_id": goal.goal_id, "status": goal.status})
+            applied.append({"op": "remove", "goal_id": goal.goal_id, "title": goal.title})
+            goal.status = 0
+
+    db.flush()
+    return applied, snapshot, rejected
+
+
+def _undo_last_adjustment(db: Session, user_id: int, plan_id: int, meta: dict) -> dict:
+    """撤销最近一次已应用的调整（同端点 body undo=true，不新增路由）。"""
+    record = (
+        db.query(PlanAdjustment)
+        .filter(
+            PlanAdjustment.user_id == user_id,
+            PlanAdjustment.plan_id == plan_id,
+            PlanAdjustment.apply_flag == 1,
+        )
+        .order_by(PlanAdjustment.adjust_id.desc())
+        .first()
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="没有可撤销的调整记录")
+    try:
+        payload = json.loads(record.adjustment or "{}")
+    except ValueError:
+        payload = {}
+    snapshot = payload.get("snapshot") or []
+
+    reverted = []
+    for item in snapshot:
+        op = item.get("op")
+        goal = (
+            db.query(StudyGoal)
+            .filter(StudyGoal.goal_id == item.get("goal_id"), StudyGoal.user_id == user_id)
+            .first()
+        )
+        if goal is None:
+            continue
+        if op == "add":
+            goal.status = 0
+        elif op == "move" and item.get("from"):
+            goal.task_date = item["from"]
+        elif op == "modify" and item.get("minutes_from"):
+            goal.expected_minutes = int(item["minutes_from"])
+        elif op == "remove":
+            goal.status = 1
+        reverted.append({"op": op, "goal_id": goal.goal_id, "title": goal.title})
+
+    record.apply_flag = 0
+    undo_record = PlanAdjustment(
+        user_id=user_id,
+        plan_id=plan_id,
+        reason=f"撤销调整 #{record.adjust_id}"[:300],
+        adjustment=json.dumps({"undo_of": record.adjust_id, "reverted": reverted}, ensure_ascii=False),
+        apply_flag=1,
+    )
+    db.add(undo_record)
+    db.commit()
+    db.refresh(undo_record)
+
+    try:
+        refreshed = (
+            db.query(StudyGoal)
+            .filter(
+                StudyGoal.user_id == user_id,
+                StudyGoal.plan_id == plan_id,
+                StudyGoal.status == 1,
+            )
+            .order_by(StudyGoal.sort_order.asc())
+            .all()
+        )
+        if refreshed:
+            _ensure_schedule(db, user_id, plan_id, refreshed, meta)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("撤销后重算排课失败: %s", exc)
+
+    return {
+        "adjust_id": undo_record.adjust_id,
+        "undo_of": record.adjust_id,
+        "reverted": reverted,
+        "reverted_count": len(reverted),
+        "message": f"已撤销上一次调整（{len(reverted)} 项）",
+        "undoable": False,
     }
 
 
@@ -743,6 +1000,7 @@ async def current_plan(
         "days_left": days_left,
         "schedule": schedule,
         "capability": capability,
+        "recent_adjustments": _recent_adjustments(db, current_user.user_id, row.plan_id),
         "adjustment_suggestion": adjustment_suggestion,
         "summary": meta.get("summary", ""),
         "phases": meta.get("phases", []),
