@@ -41,10 +41,6 @@
               <div class="stat-num">{{ state.daysLeft }}</div>
               <div class="stat-label">距考试</div>
             </div>
-            <div class="stat">
-              <div class="stat-num streak">🔥 {{ state.streak }}</div>
-              <div class="stat-label">连续打卡</div>
-            </div>
           </div>
         </div>
       </div>
@@ -140,61 +136,37 @@
           </div>
         </div>
 
-        <!-- 智能排课 -->
-        <div class="smart-schedule-card">
-          <div class="dist-title">⏰ 智能排课 · 今日时间表</div>
+        <!-- 智能排课（数据来自 /api/plan/today.schedule：按人按天生成，任务变化即重算） -->
+        <div class="smart-schedule-card" v-if="state.schedule && state.schedule.slots && state.schedule.slots.length">
+          <div class="dist-title">⏰ 智能排课 · {{ state.schedule.date }}</div>
           <div class="schedule-timeline">
-            <div class="time-slot morning">
-              <div class="time-label">🌅 上午 9:00-12:00</div>
+            <div class="time-slot" v-for="p in state.schedule.slots" :key="p.period">
+              <div class="time-label">{{ p.label }} · {{ p.planned_minutes }} 分钟</div>
               <div class="task-list">
-                <div class="task-item" :class="{ done: slot.morning.done }">
-                  <span class="task-subject">资料分析</span>
-                  <span class="task-detail">20题 · 重点：增长率</span>
-                  <button class="task-check" @click="toggleSlotTask('morning')">{{ slot.morning.done ? '✓' : '○' }}</button>
-                </div>
-                <div class="task-item" :class="{ done: slot.morning2.done }">
-                  <span class="task-subject">言语理解</span>
-                  <span class="task-detail">15题 · 重点：逻辑填空</span>
-                  <button class="task-check" @click="toggleSlotTask('morning2')">{{ slot.morning2.done ? '✓' : '○' }}</button>
-                </div>
-              </div>
-            </div>
-            <div class="time-slot afternoon">
-              <div class="time-label">☀️ 下午 14:00-17:00</div>
-              <div class="task-list">
-                <div class="task-item" :class="{ done: slot.afternoon.done }">
-                  <span class="task-subject">判断推理</span>
-                  <span class="task-detail">15题 · 重点：图形推理</span>
-                  <button class="task-check" @click="toggleSlotTask('afternoon')">{{ slot.afternoon.done ? '✓' : '○' }}</button>
-                </div>
-                <div class="task-item" :class="{ done: slot.afternoon2.done }">
-                  <span class="task-subject">数量关系</span>
-                  <span class="task-detail">10题 · 重点：工程问题</span>
-                  <button class="task-check" @click="toggleSlotTask('afternoon2')">{{ slot.afternoon2.done ? '✓' : '○' }}</button>
-                </div>
-              </div>
-            </div>
-            <div class="time-slot evening">
-              <div class="time-label">🌙 晚上 19:00-21:30</div>
-              <div class="task-list">
-                <div class="task-item" :class="{ done: slot.evening.done }">
-                  <span class="task-subject">申论</span>
-                  <span class="task-detail">大作文 · 1篇</span>
-                  <button class="task-check" @click="toggleSlotTask('evening')">{{ slot.evening.done ? '✓' : '○' }}</button>
-                </div>
-                <div class="task-item" :class="{ done: slot.evening2.done }">
-                  <span class="task-subject">错题复习</span>
-                  <span class="task-detail">复习今日错题 · 艾宾浩斯</span>
-                  <button class="task-check" @click="toggleSlotTask('evening2')">{{ slot.evening2.done ? '✓' : '○' }}</button>
+                <div class="task-item" v-for="(it, idx) in p.items" :key="p.period + '-' + idx" :class="{ done: it.done }">
+                  <span class="task-subject">{{ it.subject }}</span>
+                  <span class="task-detail">{{ it.title }} · {{ it.minutes }} 分钟</span>
+                  <button v-if="it.kind === 'task' && it.goal_id" class="task-check" @click="toggleScheduleItem(it)">
+                    {{ it.done ? '✓' : '○' }}
+                  </button>
+                  <span v-else class="task-check" title="错题复习项到错题集完成">·</span>
                 </div>
               </div>
             </div>
           </div>
           <div class="schedule-progress">
             <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: getScheduleProgress() + '%' }"></div>
+              <div class="progress-fill" :style="{ width: schedulePercent + '%' }"></div>
             </div>
-            <div class="progress-text">今日已完成 {{ getScheduleProgress() }}%</div>
+            <div class="progress-text">
+              已安排 {{ state.schedule.planned_minutes }} / {{ state.schedule.budget_minutes }} 分钟 · 完成 {{ schedulePercent }}%
+            </div>
+          </div>
+        </div>
+        <div class="smart-schedule-card" v-else>
+          <div class="dist-title">⏰ 智能排课</div>
+          <div class="schedule-empty">
+            <p>{{ (state.schedule && state.schedule.hint) || '今天还没有排任务，先在上方生成或调整计划' }}</p>
           </div>
         </div>
 
@@ -258,69 +230,8 @@
           </div>
         </div>
 
-        <!-- 能力雷达图 -->
-        <div class="radar-card">
-          <div class="dist-title">🎯 能力雷达图</div>
-          <div class="radar-wrap">
-            <svg viewBox="0 0 200 200" class="radar-svg">
-              <!-- 背景多边形 -->
-              <polygon points="100,20 170,60 170,140 100,180 30,140 30,60" fill="none" stroke="#e0e3e9" stroke-width="1"/>
-              <polygon points="100,50 150,75 150,125 100,150 50,125 50,75" fill="none" stroke="#e0e3e9" stroke-width="1"/>
-              <polygon points="100,80 130,95 130,105 100,120 70,105 70,95" fill="none" stroke="#e0e3e9" stroke-width="1"/>
-              <!-- 轴线 -->
-              <line x1="100" y1="20" x2="100" y2="180" stroke="#e0e3e9" stroke-width="1"/>
-              <line x1="30" y1="60" x2="170" y2="140" stroke="#e0e3e9" stroke-width="1"/>
-              <line x1="30" y1="140" x2="170" y2="60" stroke="#e0e3e9" stroke-width="1"/>
-              <!-- 数据多边形 -->
-              <polygon points="100,40 160,70 150,130 100,160 40,130 50,70"
-                fill="rgba(196, 30, 58, 0.2)" stroke="#c41e3a" stroke-width="2"/>
-            </svg>
-            <div class="radar-labels">
-              <span class="radar-label top">言语理解</span>
-              <span class="radar-label right-top">数量关系</span>
-              <span class="radar-label right-bottom">判断推理</span>
-              <span class="radar-label bottom">资料分析</span>
-              <span class="radar-label left-bottom">申论</span>
-              <span class="radar-label left-top">面试</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 本周进度 -->
-        <div class="week-progress">
-          <div class="dist-title">📅 本周打卡</div>
-          <div class="week-dots">
-            <div v-for="(d, i) in weekDays" :key="i" class="week-dot"
-              :class="{ done: i < state.plan.progress.percent / 100 * 7 }">
-              {{ d }}
-            </div>
-          </div>
-        </div>
-
-        <!-- 今日任务 -->
-        <div class="section">
-          <div class="section-head">
-            <span class="section-title">📌 今日任务</span>
-            <span class="section-hint">完成勾选 → 领取金币</span>
-          </div>
-          <div v-if="state.coinNotice" class="coin-notice">{{ state.coinNotice }}</div>
-          <div class="task-list">
-            <template v-if="state.today && state.today.tasks.length">
-              <div v-for="t in state.today.tasks" :key="t.goal_id"
-                class="task-item" :class="{ done: t.is_completed }">
-                <div class="task-main" @click="toggleTask(t)">
-                  <span class="checkbox">{{ t.is_completed ? '✓' : '' }}</span>
-                  <span class="task-title">{{ t.title }}</span>
-                  <span class="coin-badge" :class="{ dim: t.coin_claimed }">🪙 {{ t.coin_reward || 0 }}</span>
-                </div>
-                <button v-if="t.is_completed === 1 && t.coin_claimed === 0" class="claim-btn"
-                  @click.stop="claimCoin(t)">领取</button>
-                <span v-else-if="t.coin_claimed === 1" class="claimed-tag">已领取</span>
-              </div>
-            </template>
-            <div v-else class="task-empty">今日暂无任务，先重新生成学习计划吧</div>
-          </div>
-        </div>
+        <!-- 能力画像（与「我的」同源：/api/plan/current.capability） -->
+        <ProfileRadar class="plan-radar" />
 
         <!-- AI 提示 -->
         <div v-if="state.plan.tips" class="tips-card">
@@ -345,6 +256,31 @@
           <button class="ask-send" @click="sendAsk">发送</button>
         </div>
         <div v-if="state.askReply" class="ask-reply">{{ state.askReply }}</div>
+
+        <!-- ⑤ 调整已实际应用：本次变更 + 撤销 + 最近调整历史 -->
+        <div v-if="state.adjustResult && state.adjustResult.applied_count" class="adjust-applied">
+          <p class="adjust-applied__title">
+            本次已实际调整 {{ state.adjustResult.applied_count }} 项
+            <span v-if="state.adjustResult.rejected && state.adjustResult.rejected.length">
+              （{{ state.adjustResult.rejected.length }} 项被拒）
+            </span>
+          </p>
+          <ul>
+            <li v-for="(c, i) in state.adjustResult.applied" :key="i">
+              {{ c.op === 'add' ? '新增' : c.op === 'move' ? '改期' : c.op === 'modify' ? '改时长' : '删除' }}
+              {{ c.title }}<template v-if="c.date"> → {{ c.date }}</template>
+              <template v-if="c.minutes_to"> · {{ c.minutes_to }} 分钟</template>
+            </li>
+          </ul>
+          <button class="ask-send" @click="undoAdjust">撤销这次调整</button>
+        </div>
+        <div v-if="state.adjustHistory && state.adjustHistory.length" class="adjust-history">
+          <p class="adjust-applied__title">最近调整</p>
+          <p v-for="h in state.adjustHistory" :key="h.adjust_id">
+            {{ (h.created_at || '').slice(0, 16) }} · {{ h.reason }} · {{ h.change_count }} 项
+            <span v-if="!h.applied">（已撤销）</span>
+          </p>
+        </div>
       </div>
     </div>
   </div>
@@ -354,12 +290,13 @@
   // @ts-nocheck
   import { defineComponent, reactive, onMounted, computed } from 'vue';
   import ProfileQuizInline from '@/components/plan/ProfileQuizInline.vue';
+  import ProfileRadar from '@/components/profile/ProfileRadar.vue';
   import NavBar from './navbar.vue';
   import { bindTaskFeedback } from '@/composables/useTaskFeedback';
 
   export default defineComponent({
     name: 'StudyPlan',
-    components: { ProfileQuizInline, NavBar },
+    components: { ProfileQuizInline, ProfileRadar, NavBar },
     setup() {
       const state = reactive({
         loading: false,
@@ -367,6 +304,9 @@
         plan: null,
         showQuiz: false,      // 画像问卷内嵌在学习计划里（未完成画像时展开）
         today: null,
+        schedule: null,       // ① 今日排课（/api/plan/today.schedule）
+        adjustResult: null,   // ⑤ 最近一次 AI 调整的落地结果
+        adjustHistory: [],    // ⑤ 最近调整记录（/api/plan/current.recent_adjustments）
         daysLeft: 0,
         streak: 0,
         coinNotice: '',
@@ -486,6 +426,8 @@
           const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/today');
           if (res.ok) {
             state.today = await res.json();
+            // ① 今日排课（后端按任务+画像+待复习错题生成，任务变化即重算）
+            state.schedule = (state.today && state.today.schedule) || null;
             state.error = '';
             // 2026-11-15：已完成但金币没到账（历史数据/上次请求中断）时兜底补发
             await settlePendingGoalCoins();
@@ -778,6 +720,63 @@
         state.askReply = '';
       }
 
+      /** ① 排课项勾选：调任务 toggle（后端会重算排课），再刷新今日面板与计划 */
+      async function toggleScheduleItem(item) {
+        if (!item || !item.goal_id) return;
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch(`/api/plan/task/${item.goal_id}/toggle`, { method: 'POST' });
+          if (!res.ok) return;
+          await loadToday();
+          const cur = await window.__VTJ_AUTH__.apiFetch('/api/plan/current');
+          if (cur.ok) {
+            const d = await cur.json();
+            if (d && d.has_plan !== false) {
+              state.plan = d;
+              state.adjustHistory = d.recent_adjustments || [];
+            }
+          }
+        } catch (e) { /* 单次勾选失败不影响其它区块 */ }
+      }
+
+      /** ① 排课完成度：按"已完成分钟 / 已安排分钟"算（替代原写死的 getScheduleProgress） */
+      const schedulePercent = computed(() => {
+        const s = state.schedule;
+        if (!s || !s.slots) return 0;
+        let total = 0, done = 0;
+        s.slots.forEach((p) => (p.items || []).forEach((it) => {
+          total += it.minutes || 0;
+          if (it.done) done += it.minutes || 0;
+        }));
+        return total ? Math.round((done / total) * 100) : 0;
+      });
+
+      /** ⑤ 撤销最近一次 AI 调整（同端点 body undo=true） */
+      async function undoAdjust() {
+        try {
+          const res = await window.__VTJ_AUTH__.apiFetch('/api/plan/adjust', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ instruction: '', undo: true }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) {
+            state.askReply = data.message || '已撤销上一次调整';
+            state.adjustResult = null;
+            const cur = await window.__VTJ_AUTH__.apiFetch('/api/plan/current');
+            if (cur.ok) {
+              const d = await cur.json();
+              if (d && d.has_plan !== false) {
+                state.plan = d;
+                state.adjustHistory = d.recent_adjustments || [];
+              }
+            }
+            await loadToday();
+          } else {
+            state.askReply = data.detail || '撤销失败';
+          }
+        } catch (e) { state.askReply = '网络异常，撤销未生效'; }
+      }
+
       async function sendAsk() {
         if (!state.askText.trim()) return;
         const q = state.askText;
@@ -792,13 +791,24 @@
           });
           const data = await res.json();
           if (res.ok) {
-            const dots = (data.adjustments || []).map((a) => '· ' + a).join('\n');
-            state.askReply = '✅ 已应用调整：' + (data.summary || '计划已更新') + (dots ? '\n' + dots : '');
-            // 刷新计划摘要（plan_meta 已更新）
+            state.adjustResult = data;
+            const applied = Array.isArray(data.applied) ? data.applied : [];
+            const lines = applied.map((c) => {
+              const verb = c.op === 'add' ? '新增' : c.op === 'move' ? '改期' : c.op === 'modify' ? '改时长' : '删除';
+              return '· ' + verb + ' ' + (c.title || '') + (c.date ? ' → ' + c.date : '') + (c.minutes_to ? ' · ' + c.minutes_to + ' 分钟' : '');
+            });
+            state.askReply = applied.length
+              ? '✅ 已实际调整 ' + applied.length + ' 项：' + (data.summary || '计划已更新') + '\n' + lines.join('\n')
+              : (data.message || 'AI 只给了建议，未改动任务');
+            // 刷新计划摘要（plan_meta 已更新）与调整历史
             try {
               const r2 = await window.__VTJ_AUTH__.apiFetch('/api/plan/current');
               const d2 = await r2.json();
-              if (r2.ok && d2.has_plan !== false) state.plan = d2;
+              if (r2.ok && d2.has_plan !== false) {
+                state.plan = d2;
+                state.adjustHistory = d2.recent_adjustments || [];
+              }
+              await loadToday();
             } catch (e) { /* 刷新失败不阻塞提示 */ }
           } else {
             state.askReply = data.detail || '调整失败，请稍后再试';
@@ -832,6 +842,8 @@
             state.plan = data;
             // 剩余天数以后端计算口径为准
             state.daysLeft = data.days_left !== undefined ? data.days_left : 0;
+            // ⑤ 最近调整历史（退出重进也能看到"上次调整了什么"）
+            state.adjustHistory = data.recent_adjustments || [];
           }
         } catch (e) {}
         loadToday();
@@ -894,6 +906,7 @@
         toggleSubject, generate, toggleTask, claimCoin, reset, askAI, sendAsk, goBack,
         formatTime, togglePomodoro, resetPomodoro,
         toggleSlotTask, getScheduleProgress, gradeEssay,
+        toggleScheduleItem, schedulePercent, undoAdjust,
         slot: state.slot, essay: state.essay, scrollToOverview, scrollToToday,
         rpt, setReportPeriod, printReport,
       };
@@ -1875,6 +1888,23 @@
     margin-top: 10px; padding: 12px; background: #f0f7ff; border-radius: 10px;
     font-size: 13px; color: #1e3a6e; line-height: 1.5;
   }
+
+  /* ⑤ 调整落地结果 / 历史 / ① 排课空态 / ④ 雷达容器 */
+  .adjust-applied {
+    margin-top: 10px; padding: 12px; border-radius: 10px;
+    background: #f0fdf4; border: 1px solid #bbf7d0; font-size: 13px; color: #14532d;
+  }
+  .adjust-applied__title { margin: 0 0 6px; font-weight: 700; }
+  .adjust-applied ul { margin: 0 0 8px; padding-left: 18px; line-height: 1.7; }
+  .adjust-history {
+    margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+    background: #f8fafc; border: 1px dashed #dfe5ef; font-size: 12px; color: #4b5563;
+  }
+  .adjust-history p { margin: 2px 0; }
+  .schedule-empty {
+    padding: 14px 0 4px; text-align: center; font-size: 12.5px; color: #9ca3af;
+  }
+  .plan-radar { display: block; margin-bottom: 16px; }
 
   /* 科目分布 */
   .subject-dist { margin-bottom: 16px; }

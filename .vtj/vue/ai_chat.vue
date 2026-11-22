@@ -288,9 +288,22 @@
               </div>
             </div>
             <div class="interview-question">
-              <div class="q-label">第1题：</div>
+              <div class="q-label">第 {{ state.interviewRounds + 1 }} 题：</div>
               <div class="q-content">{{ state.interviewQuestion }}</div>
-              <div class="q-timer">⏱️ 思考3分钟，作答5分钟</div>
+              <div class="q-timer">⏱️ 思考 1 分钟，作答 3 分钟</div>
+            </div>
+            <!-- ⑥ 真·作答区（替代 window.prompt）+ 语音作答 + 计时 -->
+            <div class="interview-answer">
+              <textarea v-model="state.interviewAnswer" rows="5"
+                placeholder="把你的作答写在这里（推荐结构：表态—分析—对策—收尾）"></textarea>
+              <div class="interview-answer-actions">
+                <button class="interview-btn primary"
+                  :disabled="!state.interviewAnswer.trim() || state.interviewGrading"
+                  @click="submitAnswer">{{ state.interviewGrading ? '评分中…' : '提交作答' }}</button>
+                <button class="interview-btn" @click="startVoiceAnswer">🎤 语音作答</button>
+                <span class="interview-timer">已用时 {{ state.interviewSeconds }}s</span>
+              </div>
+              <p class="interview-scope">只练公安联考面试场景；政策类表述以官方发布为准。</p>
             </div>
             <div class="interview-actions">
               <button class="interview-btn" @click="nextQuestion">下一题</button>
@@ -594,6 +607,12 @@ export default defineComponent({
       interviewRole: 'gentle',
       interviewQuestion: '如果让你组织一次校园反诈宣传活动，你会怎么开展？',
       interviewResult: null,
+      interviewAnswer: '',      // ⑥ 作答区内容（替代 window.prompt）
+      interviewRounds: 0,       // 第几轮追问（0=首题）
+      interviewSeconds: 0,      // 本轮计时
+      interviewGrading: false,
+      interviewTimer: null,
+      interviewStartAt: 0,
       // 心情日记
       moodMode: false,
       selectedMood: '',
@@ -1217,6 +1236,40 @@ export default defineComponent({
     function startInterview() {
       state.interviewMode = true;
       state.moodMode = false;
+      state.interviewRounds = 0;
+      state.interviewAnswer = '';
+      startInterviewTimer();
+    }
+
+    /** ⑥ 计时：每题重置 */
+    function startInterviewTimer() {
+      if (state.interviewTimer) clearInterval(state.interviewTimer);
+      state.interviewStartAt = Date.now();
+      state.interviewSeconds = 0;
+      state.interviewTimer = setInterval(() => {
+        state.interviewSeconds = Math.floor((Date.now() - state.interviewStartAt) / 1000);
+      }, 1000);
+    }
+
+    /** ⑥ 语音作答：浏览器原生识别，不支持则提示改文字 */
+    function startVoiceAnswer() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        state.notice = '当前浏览器不支持语音识别，请改用文字作答（Chrome/Edge 可用）';
+        return;
+      }
+      const rec = new SR();
+      rec.lang = 'zh-CN';
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      state.notice = '正在听……说完会自动填入作答框';
+      rec.onresult = (e) => {
+        const text = e.results[0][0].transcript || '';
+        state.interviewAnswer = (state.interviewAnswer + ' ' + text).trim();
+        state.notice = '';
+      };
+      rec.onerror = () => { state.notice = '语音识别失败，请改用文字作答'; };
+      try { rec.start(); } catch (e) { state.notice = '语音识别启动失败，请改用文字'; }
     }
 
     function exitInterview() {
@@ -1247,24 +1300,43 @@ export default defineComponent({
     }
 
     async function submitAnswer() {
-      const answer = window.prompt('请输入你的作答内容（将交给 AI 考官评分）：', '');
-      if (answer === null) return;
-      if (!answer.trim()) {
-        alert('请先输入作答内容！');
+      // ⑥ 多轮：首题作答 → 追问 2 轮 → 第 3 轮结束出结构化评分（不再用 window.prompt）
+      const answer = String(state.interviewAnswer || '').trim();
+      if (!answer) {
+        state.notice = '请先输入或语音录入作答内容';
         return;
       }
       state.interviewResult = null;
       state.notice = '';
+      state.interviewGrading = true;
       const roleLabel = { strict: '严肃考官', gentle: '温和考官', pro: '专业考官' }[state.interviewRole] || '专业考官';
+      const round = state.interviewRounds + 1;
+      const isLast = round >= 3;
       try {
+        if (!isLast) {
+          const followup = await callAiOneShot(
+            '【追问】考官风格：' + roleLabel
+              + '\n面试题：' + state.interviewQuestion
+              + '\n考生作答：' + answer
+              + '\n请以考官口吻追问一个问题（一句话，不超过 40 字），只输出追问文本。',
+            'interview'
+          );
+          state.interviewQuestion = String(followup || '').trim() || state.interviewQuestion;
+          state.interviewRounds = round;
+          state.interviewAnswer = '';
+          startInterviewTimer();
+          return;
+        }
         const reply = await callAiOneShot(
           '【评分】考官风格：' + roleLabel
             + '\n面试题：' + state.interviewQuestion
-            + '\n考生作答：' + answer.trim(),
+            + '\n考生作答（最后一轮）：' + answer
+            + '\n请只输出 JSON：{"content":0-25,"logic":0-25,"expression":0-25,"presence":0-25,'
+            + '"comment":"80字内总评与改进建议"}',
           'interview'
         );
         const parsed = parseAiJson(reply);
-        if (parsed && parsed.content !== undefined && parsed.logic !== undefined) {
+        if (parsed && parsed.content !== undefined) {
           state.interviewResult = {
             content: Number(parsed.content) || 0,
             expression: Number(parsed.expression) || 0,
@@ -1272,10 +1344,15 @@ export default defineComponent({
             logic: Number(parsed.logic) || 0,
             comment: String(parsed.comment || ''),
           };
+          state.interviewRounds = round;
+          state.interviewAnswer = '';
+          if (state.interviewTimer) clearInterval(state.interviewTimer);
           return;
         }
       } catch (e) {
         state.notice = 'AI 评分暂不可用，已展示示例点评';
+      } finally {
+        state.interviewGrading = false;
       }
       state.interviewResult = {
         content: 82,
@@ -1364,6 +1441,7 @@ export default defineComponent({
       setInterviewRole,
       nextQuestion,
       submitAnswer,
+      startVoiceAnswer,
       startMoodDiary,
       exitMood,
       selectMood,
@@ -2339,6 +2417,30 @@ export default defineComponent({
   font-size: 12px;
   opacity: 0.7;
 }
+/* ⑥ 作答区：文本 + 语音 + 计时 */
+.interview-answer { margin-bottom: 16px; }
+.interview-answer textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.08);
+  color: inherit;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.interview-answer textarea::placeholder { color: rgba(255,255,255,0.5); }
+.interview-answer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.interview-answer-actions .interview-btn { flex: 0 0 auto; padding: 8px 16px; }
+.interview-timer { font-size: 12px; opacity: 0.75; }
+.interview-scope { margin: 8px 0 0; font-size: 11.5px; opacity: 0.6; }
 .interview-actions {
   display: flex;
   gap: 12px;
