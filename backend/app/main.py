@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .core.config import settings
+from .core.config import ENV_SOURCE as _ENV_SOURCE, llm_configured as _llm_configured
 from .core.redis_client import get_redis, close_redis
 from .api.v1.platform import llm
 from .api.v1.platform import xiaozhi as llm_xiaozhi
@@ -1263,6 +1264,9 @@ async def health_check():
         # 版本号（VERSION 文件）用于前后端一致性判定；revision 仅作排查细节，不参与报警
         "revision": _APP_REVISION,
         "started_at": _APP_STARTED_AT,
+        # P0：大模型配置自检（只回布尔与来源名，绝不回显密钥）
+        "llm_configured": _llm_configured(),
+        "env_source": _ENV_SOURCE,
     }
 
 @app.get("/health/foundation", tags=["系统"])

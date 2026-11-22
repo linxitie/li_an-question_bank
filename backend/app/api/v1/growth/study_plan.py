@@ -9,18 +9,29 @@
 - DELETE /api/plan/{id}      删除整个计划
 """
 
+import hashlib
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ....core.database import get_db
 from ....core.security import get_current_user
-from ....models.models import PlanAdjustment, StudyGoal, SysUser, UserNotify, UserProfile
+from ....models.models import (
+    PlanAdjustment,
+    PracticeRecord,
+    QuestionSubject,
+    StudyGoal,
+    SysUser,
+    UserNotify,
+    UserProfile,
+    WrongQuestionPersonal,
+)
 from ....services import llm_client, plan_agent
 
 logger = logging.getLogger(__name__)
@@ -340,6 +351,324 @@ async def adjust_plan(
     }
 
 
+# ==================== 智能排课（P1：按人按天生成、可动态重算） ====================
+# 设计要点：
+#   - 排课存 plan_meta["schedule"]（JSON，零迁移），带 date + sig，任务或日期一变就重算；
+#   - 规则优先（不依赖 LLM）：任务科目/预计分钟 + 画像每日时长 + 待复习错题数；
+#   - 输出三段：上午（资料/数量等重计算）/ 下午（判断/言语）/ 晚上（申论/公专 + 错题复习）；
+#   - 每项带 goal_id（可勾选同步）或 wrong 复习标记，前端据此渲染并回写。
+SCHEDULE_VERSION = 1
+
+_SCHEDULE_PERIODS = (
+    {"key": "morning", "label": "上午 9:00-12:00", "cap": 180, "subjects": ("行测",)},
+    {"key": "afternoon", "label": "下午 14:00-17:00", "cap": 180, "subjects": ("行测", "公专")},
+    {"key": "evening", "label": "晚上 19:00-21:30", "cap": 150, "subjects": ("申论", "公专")},
+)
+
+_SUBJECT_KEYWORDS = (
+    ("行测", ("行测", "言语", "资料", "判断", "数量", "常识", "推理", "分析")),
+    ("申论", ("申论", "范文", "归纳", "大作文", "作文", "概括")),
+    ("公专", ("公专", "公安", "法律", "执法", "警务", "专业科目")),
+)
+
+
+def _subject_of(title: str) -> str:
+    for name, keys in _SUBJECT_KEYWORDS:
+        if any(k in (title or "") for k in keys):
+            return name
+    return "综合"
+
+
+def _load_plan_meta(tasks) -> dict:
+    for t in tasks:
+        if isinstance(t.plan_meta, str) and t.plan_meta:
+            try:
+                data = json.loads(t.plan_meta)
+                if isinstance(data, dict):
+                    return data
+            except (ValueError, TypeError):
+                continue
+    return {}
+
+
+def _save_plan_meta(db: Session, plan_id: int, user_id: int, meta: dict) -> None:
+    db.query(StudyGoal).filter(
+        StudyGoal.plan_id == plan_id,
+        StudyGoal.user_id == user_id,
+        StudyGoal.status == 1,
+    ).update({StudyGoal.plan_meta: json.dumps(meta, ensure_ascii=False)})
+
+
+def _schedule_sig(tasks, date_str: str, daily_hours: float) -> str:
+    raw = "|".join(
+        [date_str, str(daily_hours)]
+        + [f"{t.goal_id}:{t.title}:{t.task_date}:{t.is_completed}" for t in tasks]
+    )
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _due_review_count(db: Session, user_id: int) -> int:
+    """待复习错题数（只读错题域；口径与 /growth/review/summary 一致：未排程也算今天到期）。"""
+    from sqlalchemy import func as _func
+
+    return (
+        db.query(_func.count(WrongQuestionPersonal.wrong_id))
+        .filter(
+            WrongQuestionPersonal.user_id == user_id,
+            WrongQuestionPersonal.status == 1,
+            WrongQuestionPersonal.collection_type == "WRONG",
+            or_(
+                WrongQuestionPersonal.next_review_at.is_(None),
+                WrongQuestionPersonal.next_review_at <= datetime.now(),
+            ),
+        )
+        .scalar()
+        or 0
+    )
+
+
+def _build_schedule(db: Session, user_id: int, tasks, date_str: str | None = None) -> dict:
+    """生成某日排课（纯规则，幂等）。返回 {date, slots, planned_minutes, budget_minutes, ...}。"""
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    daily_hours = float(getattr(profile, "daily_hours", 0) or 0) or 3.0
+    budget = int(round(daily_hours * 60 * 0.9))
+
+    today_tasks = [t for t in tasks if (t.task_date or "") == date_str]
+    slots = []
+    remaining_budget = budget
+    used: dict[str, int] = {p["key"]: 0 for p in _SCHEDULE_PERIODS}
+
+    def _pick_period(subject: str) -> dict:
+        # 先找"科目匹配且还有余量"的时段；都满则取余量最大的
+        for p in _SCHEDULE_PERIODS:
+            if subject in p["subjects"] and used[p["key"]] < p["cap"]:
+                return p
+        return min(_SCHEDULE_PERIODS, key=lambda p: used[p["key"]] / max(p["cap"], 1))
+
+    for t in today_tasks:
+        subject = _subject_of(t.title)
+        period = _pick_period(subject)
+        minutes = int(getattr(t, "expected_minutes", 0) or 0) or 30
+        minutes = max(10, min(60, minutes))
+        if remaining_budget <= 0:
+            break
+        avail = period["cap"] - used[period["key"]]
+        if avail <= 0:
+            period = max(_SCHEDULE_PERIODS, key=lambda p: p["cap"] - used[p["key"]])
+            avail = max(0, period["cap"] - used[period["key"]])
+        if avail <= 0:
+            break
+        minutes = max(10, min(minutes, remaining_budget, avail))
+        used[period["key"]] += minutes
+        remaining_budget -= minutes
+        slots.append(
+            {
+                "period": period["key"],
+                "period_label": period["label"],
+                "kind": "task",
+                "goal_id": t.goal_id,
+                "subject": subject,
+                "title": t.title,
+                "minutes": minutes,
+                "done": int(t.is_completed or 0) == 1,
+            }
+        )
+
+    # 错题复习项（若今日有到期错题）：晚上时段，最多 30 分钟
+    due = _due_review_count(db, user_id) if today_tasks else 0
+    if due > 0 and remaining_budget > 0:
+        minutes = min(30, due * 5, remaining_budget)
+        slots.append(
+            {
+                "period": "evening",
+                "period_label": "晚上 19:00-21:30",
+                "kind": "review",
+                "goal_id": None,
+                "subject": "错题复习",
+                "title": f"复习今日到期错题 {due} 道",
+                "minutes": minutes,
+                "done": False,
+            }
+        )
+        remaining_budget -= minutes
+
+    planned = sum(s["minutes"] for s in slots)
+    grouped = []
+    for p in _SCHEDULE_PERIODS:
+        items = [s for s in slots if s["period"] == p["key"]]
+        if not items:
+            continue
+        grouped.append(
+            {
+                "period": p["key"],
+                "label": p["label"],
+                "planned_minutes": sum(i["minutes"] for i in items),
+                "items": items,
+            }
+        )
+
+    return {
+        "date": date_str,
+        "version": SCHEDULE_VERSION,
+        "sig": _schedule_sig(tasks, date_str, daily_hours),
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "budget_minutes": budget,
+        "planned_minutes": planned,
+        "daily_hours": daily_hours,
+        "slots": grouped,
+        "hint": "" if today_tasks else "今天没有排任务，先去生成或调整计划",
+    }
+
+
+def _ensure_schedule(
+    db: Session, user_id: int, plan_id: int, tasks, meta: dict, date_str: str | None = None
+) -> dict:
+    """确保当天排课存在且与最新任务一致；不一致才重算并落库（幂等）。"""
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    daily_hours = float(getattr(profile, "daily_hours", 0) or 0) or 3.0
+    sig = _schedule_sig(tasks, date_str, daily_hours)
+    current = meta.get("schedule") if isinstance(meta.get("schedule"), dict) else None
+    if current and current.get("date") == date_str and current.get("sig") == sig:
+        return current
+    schedule = _build_schedule(db, user_id, tasks, date_str)
+    meta["schedule"] = schedule
+    _save_plan_meta(db, plan_id, user_id, meta)
+    db.commit()
+    return schedule
+
+
+# ---- 能力画像（P1：与"我的"页雷达同一份数据，供学习计划页展示） ----
+_LEVEL_SCORES = {
+    "零基础": 15,
+    "入门": 30,
+    "了解一点": 35,
+    "有基础": 60,
+    "比较稳": 80,
+    "冲刺": 90,
+    "冲刺提分": 90,
+}
+
+
+def _build_capability(db: Session, user_id: int, profile, done: int, total: int) -> dict:
+    """六维能力 + 分科正确率明细（breakdown），数据都来自本域或只读接入。"""
+    level = getattr(profile, "self_level", None) if profile else None
+    daily_hours = float(getattr(profile, "daily_hours", 0) or 0) if profile else 0.0
+    target_score = getattr(profile, "target_score", None) if profile else None
+    exam_date = getattr(profile, "exam_date", None) if profile else None
+    target_post = getattr(profile, "target_post", None) if profile else None
+    target_region = getattr(profile, "target_region", None) if profile else None
+    weaknesses = _json_list(getattr(profile, "subject_weaknesses", None) if profile else None)
+    intro = str(getattr(profile, "self_intro", "") or "") if profile else ""
+
+    goal_score = (
+        (40 if target_score else 0)
+        + (40 if exam_date else 0)
+        + (20 if (target_post or target_region) else 0)
+    )
+    plan_percent = round(done / total * 100) if total else 0
+    dims = [
+        {
+            "key": "level",
+            "label": "基础水平",
+            "value": _LEVEL_SCORES.get(str(level or ""), 30),
+            "available": bool(level),
+            "source": "画像·当前水平",
+        },
+        {
+            "key": "hours",
+            "label": "时间投入",
+            "value": min(100, round(daily_hours / 10 * 100)),
+            "available": daily_hours > 0,
+            "source": "画像·每日时长",
+        },
+        {
+            "key": "goal",
+            "label": "目标清晰",
+            "value": goal_score,
+            "available": goal_score > 0,
+            "source": "画像·目标分数/日期/岗位",
+        },
+        {
+            "key": "weak",
+            "label": "弱项认知",
+            "value": min(100, len(weaknesses) * 25),
+            "available": bool(weaknesses),
+            "source": "画像·薄弱科目",
+        },
+        {
+            "key": "intro",
+            "label": "自我表达",
+            "value": min(100, round(len(intro) / 120 * 100)),
+            "available": bool(intro),
+            "source": "画像·自我描述",
+        },
+        {
+            "key": "plan",
+            "label": "计划执行",
+            "value": plan_percent,
+            "available": total > 0,
+            "source": "计划完成率",
+        },
+    ]
+    avg = round(sum(d["value"] for d in dims) / len(dims))
+    return {
+        "dims": dims,
+        "avg": avg,
+        "plan_percent": plan_percent,
+        "breakdown": _subject_accuracy(db, user_id),
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+def _json_list(value) -> list:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str) and value.strip().startswith("["):
+        try:
+            data = json.loads(value)
+            return data if isinstance(data, list) else []
+        except ValueError:
+            return []
+    return []
+
+
+def _subject_accuracy(db: Session, user_id: int) -> list:
+    """近 30 天各科正确率（只读 practice_record，用于"哪科在进步/退步"）。"""
+    from sqlalchemy import func as _func
+
+    since = datetime.now() - timedelta(days=30)
+    rows = (
+        db.query(
+            PracticeRecord.subject_id,
+            _func.count(PracticeRecord.record_id),
+            _func.sum(PracticeRecord.is_correct),
+        )
+        .filter(PracticeRecord.user_id == user_id, PracticeRecord.practice_time >= since)
+        .group_by(PracticeRecord.subject_id)
+        .all()
+    )
+    names = {
+        sid: name
+        for sid, name in db.query(QuestionSubject.subject_id, QuestionSubject.subject_name).all()
+    }
+    out = []
+    for sid, attempts, correct in rows:
+        if not attempts:
+            continue
+        out.append(
+            {
+                "subject_id": sid,
+                "subject": names.get(sid) or f"科目{sid}",
+                "attempts": int(attempts),
+                "accuracy": round((int(correct or 0) / int(attempts)) * 100),
+            }
+        )
+    out.sort(key=lambda x: x["accuracy"])
+    return out
+
+
 @router.get("/current", summary="当前激活计划")
 async def current_plan(
     current_user: SysUser = Depends(get_current_user),
@@ -388,6 +717,11 @@ async def current_plan(
     total = len(tasks)
     percent = round(done / total * 100) if total else 0
 
+    # P1：按人按天排课（任务/日期/画像变化即重算）+ 六维能力（与"我的"雷达同源）
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.user_id).first()
+    schedule = _ensure_schedule(db, current_user.user_id, row.plan_id, tasks, meta)
+    capability = _build_capability(db, current_user.user_id, profile, done, total)
+
     # 动态调整建议：根据完成率自动给出建议
     adjustment_suggestion = None
     if total > 0:
@@ -407,6 +741,8 @@ async def current_plan(
         "plan_id": row.plan_id,
         "exam_date": exam_date,
         "days_left": days_left,
+        "schedule": schedule,
+        "capability": capability,
         "adjustment_suggestion": adjustment_suggestion,
         "summary": meta.get("summary", ""),
         "phases": meta.get("phases", []),
@@ -470,12 +806,34 @@ async def toggle_task(
         except Exception as e:
             logger.warning("里程碑写入失败: %s", e)
 
+    # P1：任务勾选后重算当日排课（完成状态直接反映到排课项）
+    schedule_recomputed = False
+    if goal.plan_id is not None:
+        try:
+            plan_tasks_rows = (
+                db.query(StudyGoal)
+                .filter(
+                    StudyGoal.user_id == current_user.user_id,
+                    StudyGoal.plan_id == goal.plan_id,
+                    StudyGoal.status == 1,
+                )
+                .order_by(StudyGoal.sort_order.asc())
+                .all()
+            )
+            if plan_tasks_rows:
+                meta = _load_plan_meta(plan_tasks_rows)
+                _ensure_schedule(db, current_user.user_id, goal.plan_id, plan_tasks_rows, meta)
+                schedule_recomputed = True
+        except Exception as exc:  # noqa: BLE001 - 排课失败不影响任务勾选
+            logger.warning("重算排课失败: %s", exc)
+
     return {
         "goal_id": goal.goal_id,
         "is_completed": goal.is_completed,
         "coin_claimed": goal.coin_claimed,
         "auto_claimed_coins": auto_coins,
         "balance": current_user.total_coins,
+        "schedule_recomputed": schedule_recomputed,
     }
 
 
@@ -588,12 +946,32 @@ async def today_tasks(
     done = sum(1 for t in tasks if t.is_completed == 1)
     claimed = sum(1 for t in tasks if t.coin_claimed == 1)
     total_coins = sum(t.coin_reward or 0 for t in tasks)
+    # P1：今日排课（与 /plan/current 同源；首页/移动端可直接复用 slots）
+    schedule = None
+    plan_id = next((t.plan_id for t in tasks if t.plan_id), None)
+    if plan_id is not None:
+        plan_rows = (
+            db.query(StudyGoal)
+            .filter(
+                StudyGoal.user_id == current_user.user_id,
+                StudyGoal.plan_id == plan_id,
+                StudyGoal.status == 1,
+            )
+            .order_by(StudyGoal.sort_order.asc())
+            .all()
+        )
+        try:
+            meta = _load_plan_meta(plan_rows)
+            schedule = _ensure_schedule(db, current_user.user_id, plan_id, plan_rows, meta)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("今日排课生成失败: %s", exc)
     return {
         "date": today,
         "total": total,
         "done": done,
         "claimed": claimed,
         "total_coins": total_coins,
+        "schedule": schedule,
         "tasks": [_task_summary(t) for t in tasks],
     }
 

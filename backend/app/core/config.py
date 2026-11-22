@@ -327,3 +327,35 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+# ==================== .env 来源与密钥自检（P0：统一到 backend/.env） ====================
+# 说明：历史上有两处 .env（backend/.env 与仓库根 .env）。规范位置是 backend/.env；
+# 根 .env 仍读取但会在启动日志与 /health 里标注"历史兼容"，便于排错与迁移。
+def env_source() -> str:
+    """返回当前生效的 .env 文件来源；只回路径名，不回显任何值。"""
+    backend_env = _BACKEND_DIR / ".env"
+    root_env = _BACKEND_DIR.parent / ".env"
+    if backend_env.exists():
+        return "backend/.env"
+    if root_env.exists():
+        return "根 .env（历史兼容，建议迁移到 backend/.env）"
+    return "未发现 .env（使用环境变量/默认值）"
+
+
+ENV_SOURCE = env_source()
+
+
+def llm_configured() -> bool:
+    """大模型密钥是否已配置（只回布尔，绝不回显密钥）。"""
+    key = (settings.LLM_API_KEY or "").strip()
+    return bool(key) and not key.startswith("<")
+
+
+if ENV_SOURCE.startswith("根 .env"):
+    import logging as _logging
+
+    _logging.getLogger(__name__).warning(
+        "检测到大模型密钥可能来自仓库根 .env（历史兼容位置）。规范位置是 backend/.env，"
+        "建议迁移后删除根 .env，避免两处配置漂移。"
+    )
