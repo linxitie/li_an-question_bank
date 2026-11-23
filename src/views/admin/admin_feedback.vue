@@ -48,18 +48,24 @@
         </header>
         <div class="fb-modal-bd">
           <p class="fb-meta">
-            作者：{{ detail.user_name || '匿名' }}
-            <span v-if="detail.is_anonymous" class="fb-anon-tag">匿名</span>
+            作者：{{ detail.is_anonymous ? '匿名' : (detail.user_name || '匿名') }}
             · {{ formatTime(detail.created_at) }}
             · {{ detail.category }}
             · <span :class="['pill', detail.status]">{{ statusLabel(detail.status) }}</span>
           </p>
           <p class="fb-detail-content">{{ detail.content }}</p>
-          <p v-if="detail.attachments && detail.attachments.length" class="att">📎 {{ detail.attachments.length }} 个附件</p>
+          <div v-if="detail.attachments && detail.attachments.length" class="fb-atts">
+            <template v-for="(a, idx) in detail.attachments" :key="idx">
+              <video v-if="isVideo(a)" :src="a.url" controls preload="metadata" class="fb-att-video"></video>
+              <a v-else :href="a.url" target="_blank" rel="noopener" class="fb-att-img">
+                <img :src="a.url" :alt="a.name || '附件'" />
+              </a>
+            </template>
+          </div>
           <div v-if="detail.replies && detail.replies.length" class="fb-replies">
             <h4>历史回复</h4>
             <div v-for="r in detail.replies" :key="r.reply_id" class="fb-reply">
-              <span class="fb-reply-time">{{ formatTime(r.created_at) }}</span>
+              <span class="fb-reply-time">{{ formatTime(r.created_at) }} · {{ r.user_name || r.role_label || r.role }}</span>
               <span>{{ r.content }}</span>
             </div>
           </div>
@@ -104,6 +110,10 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize))
 function formatTime(v: string | null) {
   if (!v) return '-';
   return String(v).replace('T', ' ').slice(0, 16);
+}
+
+function isVideo(a: any) {
+  return a?.kind === 'video' || String(a?.type || '').startsWith('video/');
 }
 
 function statusLabel(s: string) {
@@ -219,4 +229,8 @@ watch(
 .fb-modal-bd textarea { width: 100%; box-sizing: border-box; border: 1px solid #dfe3ee; border-radius: 10px; padding: 10px 12px; font-size: 14px; resize: vertical; font-family: inherit; }
 .fb-modal-ft { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 .fb-btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.fb-atts { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 12px; }
+.fb-att-img { display: inline-flex; width: 120px; height: 90px; border-radius: 8px; overflow: hidden; border: 1px solid #e3e7f0; }
+.fb-att-img img { width: 100%; height: 100%; object-fit: cover; }
+.fb-att-video { width: 360px; max-width: 100%; border-radius: 8px; background: #000; }
 </style>

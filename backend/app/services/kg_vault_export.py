@@ -95,7 +95,7 @@ def load_nodes(conn: sqlite3.Connection, user_id: int) -> list[dict[str, Any]]:
         d["mastery"] = float(d["mastery"] or 0)
         d["heat"] = float(d["heat"] or 0)
         d["subject"] = d.get("subject_name") or "未分科目"
-        d["contribution"] = round(d["heat"] * (1 - d["mastery"]), 2)
+        d["absorption_frequency"] = round(d["heat"] * (1 - d["mastery"]), 2)
         nodes.append(d)
     return nodes
 
@@ -152,7 +152,7 @@ def node_note(node: dict[str, Any], neighbors: list[dict[str, Any]],
         "subject: %s" % node["subject"],
         "mastery: %.3f" % node["mastery"],
         "heat: %.3f" % node["heat"],
-        "contribution: %s" % node["contribution"],
+        "absorption_frequency: %s" % node["absorption_frequency"],
         "attempt_count: %s" % (node["attempt_count"] or 0),
         "correct_count: %s" % (node["correct_count"] or 0),
         "question_count: %s" % q_count,
@@ -161,8 +161,8 @@ def node_note(node: dict[str, Any], neighbors: list[dict[str, Any]],
         "",
         "# " + node["point_name"],
         "",
-        "> 科目：[[%s]] ｜ 掌握度 **%s** ｜ 生长热度 **%.2f** ｜ 贡献度 **%s**"
-        % (node["subject"], fmt_pct(node["mastery"]), node["heat"], node["contribution"]),
+        "> 科目：[[%s]] ｜ 掌握度 **%s** ｜ 生长热度 **%.2f** ｜ 吸收频率 **%s**"
+        % (node["subject"], fmt_pct(node["mastery"]), node["heat"], node["absorption_frequency"]),
         "",
     ]
     bar_len = 20
@@ -202,11 +202,11 @@ def node_note(node: dict[str, Any], neighbors: list[dict[str, Any]],
 
 
 def subject_note(subject: str, nodes: list[dict[str, Any]]) -> str:
-    lines = ["# " + subject, "", "> 本科目共 %d 个已生长节点（按贡献度排序）" % len(nodes), "",
-             "| 考点 | 掌握度 | 热度 | 贡献度 | 题量 |", "|---|---|---|---|---|"]
+    lines = ["# " + subject, "", "> 本科目共 %d 个已生长节点（按吸收频率排序）" % len(nodes), "",
+             "| 考点 | 掌握度 | 热度 | 吸收频率 | 题量 |", "|---|---|---|---|---|"]
     for n in nodes:
         lines.append("| [[%s]] | %s | %.2f | %s | %s |" % (
-            n["name"], fmt_pct(n["mastery"]), n["heat"], n["contribution"], n["question_count"]))
+            n["name"], fmt_pct(n["mastery"]), n["heat"], n["absorption_frequency"], n["question_count"]))
     lines.append("")
     return "\n".join(lines)
 
@@ -244,10 +244,10 @@ def dashboard_note(user: dict[str, Any], nodes: list[dict[str, Any]], edges: lis
             "",
         ]
     else:
-        lines += ["## 最该补的 10 个节点", "", "| 考点 | 掌握度 | 热度 | 贡献度 |", "|---|---|---|---|"]
+        lines += ["## 最该补的 10 个节点", "", "| 考点 | 掌握度 | 热度 | 吸收频率 |", "|---|---|---|---|"]
         for n in weak[:10]:
             lines.append("| [[%s]] | %s | %.2f | %s |" % (
-                n["name"], fmt_pct(n["mastery"]), n["heat"], n["contribution"]))
+                n["name"], fmt_pct(n["mastery"]), n["heat"], n["absorption_frequency"]))
         lines += ["", "## 本周个性化任务候选（与系统采样同口径）", "",
                   "> 口径：score = 热度 × (1 − 掌握度)，取前 2；系统每周自动按这个口径生成 2 条「知识图谱生成」周任务。", ""]
         for i, n in enumerate(recommend, 1):

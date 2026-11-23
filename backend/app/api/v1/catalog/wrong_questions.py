@@ -23,7 +23,7 @@ from ....core.database import get_db, commit_with_retry
 from ....core.security import get_current_user
 from ....models.models import (
     WrongQuestionPersonal, QuestionBank, QuestionSubject, QuestionDetailCategory,
-    QuestionType, QuestionImage, QuestionGroup, KnowledgePoint, SysUser
+    QuestionType, QuestionImage, QuestionGroup, KnowledgePoint, QuestionKnowledge, SysUser
 )
 from ....services import image_markers
 
@@ -107,6 +107,7 @@ async def get_wrong_questions(
     year: Optional[int] = Query(None, description="年份筛选（题目所属年份）"),
     source: str = Query("", description="来源筛选（模糊）"),
     sub_category: str = Query("", description="子科目名筛选（如 基础知识）"),
+    point_id: Optional[int] = Query(None, description="考点ID筛选（question_knowledge）"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     current_user: SysUser = Depends(get_current_user),
@@ -159,6 +160,14 @@ async def get_wrong_questions(
                 )
             )
         query = query.filter(WrongQuestionPersonal.question_id.in_(q_sub))
+
+    if point_id:
+        # 2026-11-23：错题集第三级筛选（考点）。题目与考点是多对多，只按考点的题目集合过滤，
+        # 不做聚合，避免同一题因多个考点重复出现。
+        point_q = db.query(QuestionKnowledge.question_id).filter(
+            QuestionKnowledge.knowledge_point_id == point_id
+        )
+        query = query.filter(WrongQuestionPersonal.question_id.in_(point_q))
 
     total = query.count()
     items = query.order_by(desc(WrongQuestionPersonal.add_time))\

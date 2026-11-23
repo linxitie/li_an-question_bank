@@ -104,7 +104,7 @@ def test_sample_excludes_mastered_nodes(db_session, test_user):
     assert all(i["point_id"] != p.point_id for i in result)
 
 
-def test_contribution_and_bonus_cap(db_session, test_user):
+def test_absorption_frequency_and_bonus_cap(db_session, test_user):
     p = _point(db_session, "贡献度知识点")
     kg_growth.record_event(db_session, test_user.user_id, p.point_id, "answer_wrong")
     db_session.commit()
@@ -112,8 +112,8 @@ def test_contribution_and_bonus_cap(db_session, test_user):
         KgUserNodeState.user_id == test_user.user_id, KgUserNodeState.point_id == p.point_id
     ).first()
 
-    contribution = kg_growth.contribution(node)
-    assert contribution > 0
+    absorption = kg_growth.absorption_frequency(node)
+    assert absorption > 0
     bonus = kg_growth.reward_bonus(node)
     assert 0 <= bonus <= kg_growth.MAX_REWARD_BONUS
 

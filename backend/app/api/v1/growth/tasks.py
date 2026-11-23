@@ -199,7 +199,7 @@ def _ensure_kg_personalized_tasks(user_id: int, db: Session) -> list:
         if changed:
             db.commit()
         return []
-    return kg_growth.ensure_personalized_tasks(db, user_id, week=week, n=2)
+    return kg_growth.ensure_personalized_tasks(db, user_id, week=week, n=3)
 
 
 def _ensure_random_tasks(user_id: int, db: Session):

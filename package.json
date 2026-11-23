@@ -16,6 +16,7 @@
   "scripts": {
     "setup": "npm ci",
     "dev": "cross-env ENV_TYPE=local vite",
+    "dev:stack": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-restart.ps1",
     "prebuild": "npm run sync:vtj-version && node scripts/verify-project-health.mjs",
     "build": "npm run build:prod",
     "build:sit": "npm run typecheck:guarded && cross-env ENV_TYPE=sit vite build",

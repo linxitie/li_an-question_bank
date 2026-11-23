@@ -16,7 +16,9 @@
     <BackToTop />
     <!-- 番茄钟挂件：全局常驻，任何页面都能随时专注（用户要求：不要埋在页面里） -->
     <PomodoroWidget />
-    <!-- 复习提醒铃铛 + 版本角标：全局常驻，答题页内部自行隐藏 -->
+    <!-- 学生端导航补丁：把铃铛/头像/下载入口统一到顶部导航（R3：不改 .vtj 模板） -->
+    <StudentTopBar />
+    <!-- 复习提醒铃铛 + 版本角标：全局常驻，弹窗由顶部铃铛触发 -->
     <ReviewBell />
     <BuildStamp />
   </ElConfigProvider>
@@ -40,6 +42,7 @@ import VtjErrorBoundary from './components/common/VtjErrorBoundary.vue';
 import BackToTop from './components/common/BackToTop.vue';
 import BuildStamp from './components/common/BuildStamp.vue';
 import ReviewBell from './components/domain/ReviewBell.vue';
+import StudentTopBar from './components/layout/StudentTopBar.vue';
 const { disabled, title, menus, logo, themeSwitchable, pure } = useMask();
 
 const actions: ActionBarItems = [

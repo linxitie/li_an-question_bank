@@ -689,6 +689,7 @@ import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
   import { titleColorValue } from '@/components/forum/titleColors';
   import { isImageUrl } from '@/components/forum/imageUtils';
   import type { ForumImageAttachment } from '@/components/forum/imageUtils';
+  import { mountFeedbackUploader } from '@/utils/feedbackUploader';
   export default defineComponent({
     name: 'Forum',
     components: {
@@ -779,7 +780,7 @@ import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
         myPostsPage: 1,
         myPostsTab: 'normal',
         myPostsSelected: [] as number[],
-        feedbackModal: { visible: false, content: '', anonymous: false, submitting: false },
+        feedbackModal: { visible: false, content: '', anonymous: false, submitting: false, attachments: [] as any[] },
         myPostsPageSize: 20,
         myPostsLoading: false,
         _refreshTimer: null as any,
@@ -1783,10 +1784,27 @@ import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
         this.state.showMyPosts = false;
       },
       openFeedback() {
-        this.state.feedbackModal = { visible: true, content: '', anonymous: false, submitting: false };
+        this._unmountFeedbackUploader();
+        this.state.feedbackModal = { visible: true, content: '', anonymous: false, submitting: false, attachments: [] };
+        // R3：不改 .vtj 模板，弹窗渲染完成后把上传控件注入到 .feedback-card 内。
+        this.$nextTick(() => this._mountFeedbackUploader());
+      },
+      _mountFeedbackUploader() {
+        const card = document.querySelector('.feedback-card') as HTMLElement | null;
+        if (!card) return;
+        this._feedbackUploaderUnmount = mountFeedbackUploader(card, (items: any[]) => {
+          this.state.feedbackModal.attachments = items;
+        });
+      },
+      _unmountFeedbackUploader() {
+        if (this._feedbackUploaderUnmount) {
+          this._feedbackUploaderUnmount();
+          this._feedbackUploaderUnmount = null;
+        }
       },
       closeFeedback() {
         this.state.feedbackModal.visible = false;
+        this._unmountFeedbackUploader();
       },
       async submitFeedback() {
         const m = this.state.feedbackModal;
@@ -1801,13 +1819,15 @@ import InlineCommentEditor from '@/components/forum/InlineCommentEditor.vue';
               content,
               category: '其他',
               source: 'forum',
-              is_anonymous: m.anonymous ? 1 : 0
+              is_anonymous: m.anonymous ? 1 : 0,
+              attachments: m.attachments || []
             })
           });
           const data = await res.json();
           if (res.ok) {
             this._safeMsg('success', data.ticket_no ? '反馈已提交：' + data.ticket_no : '反馈已提交');
             m.visible = false;
+            this._unmountFeedbackUploader();
           } else {
             this._safeMsg('error', data.detail || '提交失败');
           }

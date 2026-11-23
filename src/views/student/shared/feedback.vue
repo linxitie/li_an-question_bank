@@ -42,6 +42,12 @@
               <span :class="['fb-status', 'st-' + f.status]">{{ statusLabel(f.status) }}</span>
             </div>
             <div class="fb-content">{{ f.content }}</div>
+            <div v-if="f.attachments && f.attachments.length" class="fb-atts">
+              <template v-for="(a, idx) in f.attachments" :key="idx">
+                <video v-if="isVideo(a)" :src="a.url" controls preload="metadata" class="fb-att-video"></video>
+                <a v-else :href="a.url" target="_blank" rel="noopener"><img :src="a.url" :alt="a.name || '附件'" /></a>
+              </template>
+            </div>
             <div class="fb-reply" v-if="f.reply">
               <strong>回复：</strong>{{ f.reply }}
               <span class="fb-time">{{ (f.replied_at || '').slice(0, 10) }}</span>
@@ -58,10 +64,17 @@
         <button class="fb-modal-close" @click="showDetail = false">×</button>
         <h3>工单详情</h3>
         <p class="fb-ticket-line" v-if="detail?.ticket_no">工单号：{{ detail.ticket_no }}</p>
+        <p class="fb-submitter">提交人：{{ detail?.is_anonymous ? '匿名' : (detail?.user_name || '我') }}</p>
         <p class="fb-detail-content">{{ detail?.content }}</p>
+        <div v-if="detail?.attachments && detail.attachments.length" class="fb-atts">
+          <template v-for="(a, idx) in detail.attachments" :key="idx">
+            <video v-if="isVideo(a)" :src="a.url" controls preload="metadata" class="fb-att-video"></video>
+            <a v-else :href="a.url" target="_blank" rel="noopener"><img :src="a.url" :alt="a.name || '附件'" /></a>
+          </template>
+        </div>
         <div class="fb-timeline">
           <div v-for="r in detail?.replies || []" :key="r.reply_id" class="fb-reply-row">
-            <span class="fb-reply-role">{{ r.role }}</span>
+            <span class="fb-reply-role">{{ r.user_name || r.role_label || r.role }}</span>
             <span>{{ r.content }}</span>
           </div>
           <p v-if="!(detail?.replies || []).length" class="empty">暂无回复</p>
@@ -75,6 +88,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import { ElMessage } from 'element-plus';
 import { ChatDotRound } from '@vtj/icons';
@@ -86,6 +100,11 @@ const list = ref<any[]>([]);
 const showDetail = ref(false);
 const detail = ref<any>(null);
 const replyText = ref('');
+const route = useRoute();
+
+function isVideo(a: any) {
+  return a?.kind === 'video' || String(a?.type || '').startsWith('video/');
+}
 
 async function openDetail(feedbackId: number) {
   try {
@@ -150,10 +169,19 @@ async function submitFeedback() {
   }
 }
 
-onMounted(loadMy);
+onMounted(async () => {
+  await loadMy();
+  const openId = Number(route.query.open || 0);
+  if (openId) await openDetail(openId);
+});
 </script>
 
 <style scoped>
+.fb-atts { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.fb-atts img { width: 96px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid #e3e8f2; }
+.fb-att-video { width: 320px; max-width: 100%; border-radius: 8px; background: #000; }
+.fb-reply-row { white-space: pre-wrap; }
+.fb-submitter { color: #5a6488; font-size: 13px; margin: 4px 0 8px; }
 .feedback-page {
   min-height: 100vh;
   background: linear-gradient(180deg, #f8f9fc 0%, #f1f3f8 100%);

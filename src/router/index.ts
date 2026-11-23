@@ -1,4 +1,4 @@
-﻿/*
+/*
  * 砺安题库 - 路由配置（三端分离）
  */
 import {
@@ -189,7 +189,9 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/wrong-questions',
     name: 'WrongQuestions',
-    component: () => import('$vtj/vue/wrong_questions.vue'),
+    // 2026-11-23：错题集改为手写页（数据化筛选 + 我的答案/正确答案对比 + 卡片 v2）；
+    // 旧 .vtj 页保留未删（R1），需要回滚时把这里换回 $vtj/vue/wrong_questions.vue 即可。
+    component: () => import('@/views/student/pc/wrong_questions_pro.vue'),
     meta: { roles: ['student'] }
   },
   {
@@ -1013,6 +1015,14 @@ const router = createRouter({
 router.onError((error) => {
   if (reloadForChunkError()) return;
   console.error('[router] 页面模块加载失败:', error);
+});
+
+// 2026-11-23：下载客户端页从应用下线（用户要求「页面一起删」）。
+// R1 禁止删除 .vtj/vue/download_client.vue 文件，所以这里拦截旧地址并回首页；
+// 菜单项与顶部按钮同步移除，确保用户不再有入口。
+router.beforeEach((to) => {
+  if (to.path === '/page/download_client') return { path: '/page/home_page', replace: true };
+  return true;
 });
 
 // ==================== 路由守卫 — 三端权限控制 ====================

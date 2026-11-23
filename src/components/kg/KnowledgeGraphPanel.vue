@@ -62,6 +62,7 @@
               @pointerdown.stop="startDrag(node, $event)"
             >
               <circle
+                :class="{ 'is-breathing': breathingIds.has(node.point_id) }"
                 :cx="displayPos(node).x"
                 :cy="displayPos(node).y"
                 :r="nodeRadius(node)"
@@ -114,7 +115,7 @@
           <ul class="kgp-samples">
             <li v-for="s in samples" :key="s.point_id">
               <span class="kgp-sample-name">{{ s.point_name }}</span>
-              <span class="kgp-sample-meta">p={{ (s.probability * 100).toFixed(1) }}% · 贡献 {{ s.contribution.toFixed(2) }}</span>
+              <span class="kgp-sample-meta">p={{ (s.probability * 100).toFixed(1) }}% · 吸收 {{ s.absorption_frequency.toFixed(2) }}</span>
             </li>
           </ul>
           <p v-if="!samples.length" class="kgp-hint">暂无候选（先积累答题行为）</p>
@@ -134,7 +135,7 @@
         <strong>{{ activeNode.point_name }}</strong>
         <span>掌握度 {{ (activeNode.mastery * 100).toFixed(0) }}%</span>
         <span>热度 {{ activeNode.heat.toFixed(2) }}</span>
-        <span>贡献度 {{ activeNode.contribution.toFixed(2) }}</span>
+        <span>吸收频率 {{ activeNode.absorption_frequency.toFixed(2) }}</span>
         <span>答题 {{ activeNode.attempt_count }} 次 / 对 {{ activeNode.correct_count }}</span>
       </div>
     </section>
@@ -151,7 +152,7 @@ interface KgNode {
   heat: number;
   attempt_count: number;
   correct_count: number;
-  contribution: number;
+  absorption_frequency: number;
 }
 interface KgEdge {
   src_point: number;
@@ -163,7 +164,7 @@ interface KgSample {
   point_id: number;
   point_name: string;
   probability: number;
-  contribution: number;
+  absorption_frequency: number;
 }
 interface HabitProfile {
   preferred_slot: string | null;
@@ -588,6 +589,15 @@ function nodeColor(node: KgNode): string {
   return NODE_PALETTE[Math.abs(node.point_id) % NODE_PALETTE.length];
 }
 
+/** 呼吸感只给「最值得吸收」的一小撮节点：全图一起动既晃眼也掉帧。 */
+const breathingIds = computed(() => {
+  const top = [...nodes.value]
+    .filter((n) => (n.heat || 0) > 0)
+    .sort((a, b) => (b.absorption_frequency || 0) - (a.absorption_frequency || 0))
+    .slice(0, 30);
+  return new Set(top.map((n) => n.point_id));
+});
+
 function nodeRadius(node: KgNode): number {
   return Math.min(30, 12 + Math.sqrt(Math.max(0, node.heat)) * 5);
 }
@@ -725,7 +735,7 @@ async function loadAll(): Promise<void> {
         heat: n.heat || 0,
         attempt_count: n.attempt_count || 0,
         correct_count: n.correct_count || 0,
-        contribution: n.contribution || 0
+        absorption_frequency: n.absorption_frequency || 0
       }));
       edges.value = data.edges || [];
     } else {
@@ -824,6 +834,18 @@ onBeforeUnmount(() => {
 .kgp-node.is-active circle {
   stroke: #f59e0b;
   stroke-width: 3;
+}
+@keyframes kgp-breathe {
+  0%, 100% { opacity: 0.82; filter: drop-shadow(0 0 0 rgba(37, 99, 235, 0)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 7px rgba(37, 99, 235, 0.55)); }
+}
+.kgp-node circle.is-breathing {
+  animation: kgp-breathe 2.8s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kgp-node circle.is-breathing { animation: none; }
 }
 .kgp-tip-name {
   font-size: 12px;

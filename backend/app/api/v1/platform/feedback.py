@@ -55,29 +55,50 @@ async def get_faq():
 VALID_FEEDBACK_TYPES = {"question_content", "answer", "analysis", "function", "other"}
 VALID_SOURCES = {"form", "forum", "practice"}
 MAX_FEEDBACK_IMAGES = 5
+MAX_FEEDBACK_VIDEOS = 1
+MAX_FEEDBACK_ATTACHMENTS = MAX_FEEDBACK_IMAGES + MAX_FEEDBACK_VIDEOS
+ALLOWED_ATTACHMENT_KINDS = {"image", "video"}
 
 
 def _validate_attachments(raw: Any) -> list:
-    """反馈截图最多 5 张；只接受 {name,url,size,type} 结构。"""
+    """反馈附件：图片最多 5 张 + 视频最多 1 个。
+
+    结构 {name,url,size,type,kind}；kind 缺省按 type 前缀推断，兼容历史数据。
+    """
     if not raw:
         return []
     if not isinstance(raw, list):
         raise HTTPException(status_code=400, detail="attachments 必须是数组")
-    if len(raw) > MAX_FEEDBACK_IMAGES:
+    if len(raw) > MAX_FEEDBACK_ATTACHMENTS:
         raise HTTPException(
             status_code=400,
-            detail=f"反馈截图最多 {MAX_FEEDBACK_IMAGES} 张",
+            detail=f"反馈附件最多 {MAX_FEEDBACK_ATTACHMENTS} 个（图片 ≤{MAX_FEEDBACK_IMAGES}、视频 ≤{MAX_FEEDBACK_VIDEOS}）",
         )
     cleaned = []
+    images = 0
+    videos = 0
     for item in raw:
         if not isinstance(item, dict) or not item.get("url"):
             raise HTTPException(status_code=400, detail="附件格式错误")
+        mime = str(item.get("type") or "")
+        kind = str(item.get("kind") or ("video" if mime.startswith("video/") else "image")).lower()
+        if kind not in ALLOWED_ATTACHMENT_KINDS:
+            raise HTTPException(status_code=400, detail=f"不支持的附件类型：{kind}")
+        if kind == "image":
+            images += 1
+            if images > MAX_FEEDBACK_IMAGES:
+                raise HTTPException(status_code=400, detail=f"反馈图片最多 {MAX_FEEDBACK_IMAGES} 张")
+        else:
+            videos += 1
+            if videos > MAX_FEEDBACK_VIDEOS:
+                raise HTTPException(status_code=400, detail="反馈视频最多 1 个")
         cleaned.append(
             {
                 "name": str(item.get("name") or ""),
                 "url": str(item.get("url")),
                 "size": item.get("size"),
-                "type": item.get("type"),
+                "type": mime or None,
+                "kind": kind,
             }
         )
     return cleaned
@@ -179,11 +200,31 @@ async def get_feedback_detail(
         .order_by(FeedbackReply.created_at.asc())
         .all()
     )
+    # 回复人姓名：管理员/教师显示用户名；反馈是匿名时，学生自己的回复也显示「匿名」。
+    reply_user_ids = {r.user_id for r in replies if r.user_id}
+    reply_users = {}
+    if reply_user_ids:
+        reply_users = {
+            u.user_id: (u.username or u.nickname or u.user_no)
+            for u in db.query(SysUser).filter(SysUser.user_id.in_(reply_user_ids)).all()
+        }
+    role_labels = {
+        "student": "学生",
+        "teacher": "教师",
+        "admin": "管理员",
+        "practice_admin": "练习管理员",
+    }
     data["replies"] = [
         {
             "reply_id": r.reply_id,
             "user_id": r.user_id,
             "role": r.role,
+            "role_label": role_labels.get(r.role or "", r.role or ""),
+            "user_name": (
+                "匿名"
+                if getattr(fb, "is_anonymous", 0) and r.user_id == fb.user_id
+                else reply_users.get(r.user_id, "")
+            ),
             "content": r.content,
             "attachments": r.attachments or [],
             "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -221,6 +262,27 @@ async def reply_own_feedback(
             attachments=_validate_attachments(payload.get("attachments")),
         )
     )
+    # 学生追加回复 = 工单重新需要管理员处理；同时写管理员消息中心，否则管理员端看不到新回复。
+    fb.status = "pending"
+    display_name = "匿名" if getattr(fb, "is_anonymous", 0) else (
+        current_user.username or current_user.nickname or current_user.user_no or "学生"
+    )
+    admin_ids = [
+        row[0]
+        for row in db.query(SysUser.user_id).filter(SysUser.user_type == "admin").all()
+    ]
+    for admin_id in admin_ids:
+        db.add(
+            UserNotification(
+                user_id=admin_id,
+                type="feedback",
+                title="问题反馈有新的追加回复",
+                content=f"{display_name}：{content[:80]}",
+                link=f"/admin/feedback?open={feedback_id}",
+                related_type="feedback",
+                related_id=feedback_id,
+            )
+        )
     db.commit()
     return {"success": True, "feedback_id": feedback_id}
 
@@ -308,6 +370,19 @@ async def reply_feedback(
             content=reply,
         )
     )
+    # 2026-11-23：管理员回复要进学生收件箱（右上铃铛），否则学生只能自己回来翻反馈列表。
+    if fb.user_id and fb.user_id != current_user.user_id:
+        db.add(
+            UserNotification(
+                user_id=fb.user_id,
+                type="feedback_reply",
+                title="你的问题反馈有新回复",
+                content=reply[:100],
+                link=f"/feedback?open={feedback_id}",
+                related_type="feedback",
+                related_id=feedback_id,
+            )
+        )
     db.commit()
     return {"message": "回复成功", "feedback_id": feedback_id}
 

@@ -175,10 +175,11 @@
 
 <script lang="ts">
 // @ts-nocheck
-import { defineComponent, ref, computed, onMounted, nextTick, h } from 'vue';
+import { defineComponent, ref, computed, onMounted, nextTick, watch, h } from 'vue';
 import { useRouter } from 'vue-router';
 import { XIcon } from '@vtj/ui';
 import MobileTabBar from '@/components/mobile/MobileTabBar.vue';
+import { mountFeedbackUploader } from '@/utils/feedbackUploader';
 import {
   ArrowLeft,
   Plus,
@@ -247,6 +248,22 @@ export default defineComponent({
     const feedbackText = ref('');
     const feedbackAnonymous = ref(false);
     const feedbackSubmitting = ref(false);
+    // 2026-11-23：反馈支持图片/视频（控件注入，不改模板）
+    const feedbackAttachments = ref<any[]>([]);
+    let feedbackUploaderUnmount: (() => void) | null = null;
+    const unmountFeedbackUploader = () => {
+      if (feedbackUploaderUnmount) { feedbackUploaderUnmount(); feedbackUploaderUnmount = null; }
+    };
+    watch(showFeedback, (visible) => {
+      if (!visible) { unmountFeedbackUploader(); return; }
+      feedbackAttachments.value = [];
+      nextTick(() => {
+        const card = document.querySelector('.m-fb-card') as HTMLElement | null;
+        if (card) {
+          feedbackUploaderUnmount = mountFeedbackUploader(card, (items) => { feedbackAttachments.value = items; });
+        }
+      });
+    });
     // key 必须与后端 forum_post.share_type 枚举一致
     // 2026-10-31：取消原分类，改为 全部 / 今日热门 / 我的帖子
     const tabs = ref([
@@ -484,12 +501,14 @@ export default defineComponent({
             content,
             category: '其他',
             source: 'mobile_forum',
-            is_anonymous: feedbackAnonymous.value ? 1 : 0
+            is_anonymous: feedbackAnonymous.value ? 1 : 0,
+            attachments: feedbackAttachments.value
           })
         });
         const data = await res.json();
         if (res.ok) {
           showFeedback.value = false;
+          unmountFeedbackUploader();
           feedbackText.value = '';
           feedbackAnonymous.value = false;
           alert('反馈已提交：' + (data.ticket_no || ''));

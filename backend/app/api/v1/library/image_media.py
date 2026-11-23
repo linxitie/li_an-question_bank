@@ -25,6 +25,19 @@ router = APIRouter(prefix="/api/media", tags=["媒体"])
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
+# 反馈视频：只收浏览器可播放的三种容器，50MB 上限（与产品方案一致）。
+ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm"}
+MAX_VIDEO_SIZE = 50 * 1024 * 1024
+
+
+def _video_magic_ok(ext: str, content: bytes) -> bool:
+    """文件头校验，避免把任意文件改扩展名当视频上传。"""
+    if ext in (".mp4", ".mov"):
+        return len(content) >= 12 and content[4:8] == b"ftyp"
+    if ext == ".webm":
+        return content.startswith(b"\x1aE\xdf\xa3")
+    return False
+
 
 def _decode_image(content: bytes) -> Image.Image:
     try:
@@ -92,6 +105,44 @@ async def upload_image(
         "name": filename,
         "size": len(encoded),
         "type": mime,
+        "kind": "image",
         "width": image.width,
         "height": image.height,
+    }
+
+
+@router.post("/video", summary="上传反馈视频")
+async def upload_video(
+    file: UploadFile = File(...),
+    current_user: SysUser = Depends(get_current_user),
+):
+    """反馈视频上传：mp4/mov/webm，≤50MB，UUID 落 uploads/videos/YYYYMM。"""
+    filename = file.filename or ""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_VIDEO_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="仅支持 mp4/mov/webm 视频")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="文件为空")
+    if len(content) > MAX_VIDEO_SIZE:
+        raise HTTPException(status_code=413, detail="视频不能超过 50MB")
+    if not _video_magic_ok(ext, content):
+        raise HTTPException(status_code=400, detail="文件内容不是有效的视频")
+
+    now = datetime.now()
+    relative_dir = f"videos/{now:%Y%m}"
+    upload_dir = os.path.join(settings.UPLOAD_DIR, "videos", f"{now:%Y%m}")
+    os.makedirs(upload_dir, exist_ok=True)
+    stored_name = f"{uuid.uuid4().hex}{ext}"
+    with open(os.path.join(upload_dir, stored_name), "wb") as handle:
+        handle.write(content)
+
+    mime = {".mp4": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm"}[ext]
+    return {
+        "url": f"/uploads/{relative_dir}/{stored_name}",
+        "name": filename,
+        "size": len(content),
+        "type": mime,
+        "kind": "video",
     }

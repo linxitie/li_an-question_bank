@@ -671,19 +671,10 @@
 
         return items.map(function(item) {
           var defKey = nameKeyMap[item.name] || item.name;
-          // 「其他（未细分）」收容箱：后端以 sub.fallback 单独下发，内联树没有专门的
-          // 渲染分支，这里并成一个不可再下钻的叶子节点，点击后落到练习中心的收容入口。
+          // 2026-11-23：考点树里不再合成「其他（未细分）」节点。
+          // 收容箱只允许存在于子科目层（后端 sub.fallback），点整张子科目卡直接练习；
+          // 这样任何 L2 之下都不会再出现「其他」。
           var kps = (item.knowledge_points || []).slice();
-          if (item.fallback && (item.fallback.total_questions || 0) > 0) {
-            kps.push({
-              point_id: (item.fallback.point_ids && item.fallback.point_ids[0]) || 0,
-              point_name: item.fallback.name || '其他（未细分）',
-              total_questions: item.fallback.total_questions || 0,
-              done_count: item.fallback.done_count || 0,
-              children: [],
-              is_fallback: true,
-            });
-          }
           return {
             key: defKey,
             name: item.name,

@@ -1,6 +1,6 @@
 """自生长知识图谱 API（2026-11-05 M3）。
 
-- GET  /api/knowledge/kg/nodes/mine     我的节点状态（掌握度/热度/贡献度）
+- GET  /api/knowledge/kg/nodes/mine     我的节点状态（掌握度/热度/吸收频率）
 - GET  /api/knowledge/kg/edges/mine     我的边（权重/热度）
 - GET  /api/knowledge/kg/sample         本周个性化任务候选（非均匀采样结果）
 - POST /api/knowledge/kg/generate       生成本周个性化任务（幂等）
@@ -63,7 +63,7 @@ async def my_nodes(
                 "heat": round(r.heat or 0.0, 4),
                 "attempt_count": r.attempt_count,
                 "correct_count": r.correct_count,
-                "contribution": kg_growth.contribution(r),
+                "absorption_frequency": kg_growth.absorption_frequency(r),
                 "last_event_at": r.last_event_at.isoformat() if r.last_event_at else None,
             }
             for r in rows
@@ -136,7 +136,7 @@ async def my_habits(
 
 @router.post("/generate", summary="生成本周个性化任务（幂等）")
 async def generate(
-    n: int = Query(2, ge=1, le=5),
+    n: int = Query(3, ge=1, le=5),
     current_user: SysUser = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -342,7 +342,7 @@ async def global_graph(
                 ),
                 "attempt_count": int(states[p.point_id].attempt_count or 0) if p.point_id in states else 0,
                 "correct_count": int(states[p.point_id].correct_count or 0) if p.point_id in states else 0,
-                "contribution": round(
+                "absorption_frequency": round(
                     (float(states[p.point_id].heat or 0.0) * (1 - float(states[p.point_id].mastery or 0.0)))
                     if p.point_id in states else 0.0,
                     4,

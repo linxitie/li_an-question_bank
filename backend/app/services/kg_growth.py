@@ -4,7 +4,7 @@
 1. 采集行为（答题对错/错题/笔记编辑）→ 更新用户级节点掌握度与生长热度；
 2. 边演化：同一时间窗内先后命中的两个知识点之间新增/加权边；
 3. 采样：按 `heat` 与"边权重变化率"构造 softmax 非均匀分布，抽节点生成个性化周任务；
-4. 奖励：`contribution = heat × (1 - mastery)`，生长快但掌握度低的节点奖励加成。
+4. 奖励：`absorption_frequency = heat × (1 - mastery)`，生长快但掌握度低的节点奖励加成。
 
 为什么用户级而不是复用静态 kg_edge：
 静态图谱是"教材的结构"，这里是"这个人的图谱"。同一知识点，A 已掌握、B 刚踩坑，
@@ -264,8 +264,8 @@ def node_score(db: Session, node: KgUserNodeState, days: int = 7) -> float:
     return DEFAULT_ALPHA_HEAT * (node.heat or 0.0) + DEFAULT_BETA_GROWTH * rate
 
 
-def contribution(node: KgUserNodeState) -> float:
-    """生长贡献度 = 热度 × (1 - 掌握度)：长得快、还没掌握 → 贡献大。"""
+def absorption_frequency(node: KgUserNodeState) -> float:
+    """吸收频率 = 热度 × (1 - 掌握度)：长得快、还没掌握 → 越值得优先吸收。"""
     return round((node.heat or 0.0) * (1.0 - min(1.0, node.mastery or 0.0)), 4)
 
 
@@ -334,18 +334,18 @@ def sample_nodes(
             "heat": round(node.heat or 0.0, 4),
             "score": round(score, 4),
             "probability": round(prob, 4),
-            "contribution": contribution(node),
+            "absorption_frequency": absorption_frequency(node),
         }
         for node, prob, score in ranked
     ]
 
 
 def reward_bonus(node: KgUserNodeState) -> float:
-    """个性化任务奖励加成：贡献度越高加成越大，封顶 30%。"""
-    return round(min(MAX_REWARD_BONUS, contribution(node)), 4)
+    """个性化任务奖励加成：吸收频率越高加成越大，封顶 30%。"""
+    return round(min(MAX_REWARD_BONUS, absorption_frequency(node)), 4)
 
 
-def ensure_personalized_tasks(db: Session, user_id: int, week: Optional[str] = None, n: int = 2) -> list:
+def ensure_personalized_tasks(db: Session, user_id: int, week: Optional[str] = None, n: int = 3) -> list:
     """为本人生成本周的个性化周任务（幂等：按 week+user+point 唯一 code 复用）。
 
     生成的任务 `personalized_for=user_id`、`metric=kg_node_questions`、`metric_param=point_id`，
@@ -365,13 +365,13 @@ def ensure_personalized_tasks(db: Session, user_id: int, week: Optional[str] = N
             KgUserNodeState.point_id == point_id,
         ).first()
         bonus = reward_bonus(node) if node else 0.0
-        base = int(round(KG_PERSONALIZED_BASE_COINS * (1 + bonus)))  # 基础 40 币 + 贡献度加成（≤30%）
+        base = int(round(KG_PERSONALIZED_BASE_COINS * (1 + bonus)))  # 基础 40 币 + 吸收频率加成（≤30%）
         if not task:
             task = Task(
                 task_code=code,
                 t_type="weekly",
                 title=f"本周在「{item['point_name']}」完成 30 道题",
-                description=f"系统按你的薄弱点生成（贡献度 {item['contribution']}）",
+                description=f"系统按你的薄弱点生成（吸收频率 {item['absorption_frequency']}）",
                 metric="kg_node_questions",
                 mode="calc",
                 threshold=30,

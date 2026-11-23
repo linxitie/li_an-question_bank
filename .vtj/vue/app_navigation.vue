@@ -52,7 +52,6 @@
           { name: 'recruitment', title: '招考信息', route: '/page/recruitment_info' },
           { name: 'about', title: '关于砺安题库', route: '/page/about' },
           { name: 'forum', title: '论坛', route: '/page/forum' },
-          { name: 'download', title: '下载客户端', route: '/page/download_client' },
           { name: 'login', title: '登录', route: '/login' }
         ]
       });

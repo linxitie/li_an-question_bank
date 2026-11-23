@@ -327,6 +327,7 @@ KNOWN_EXTRA_OPERATIONS = {
     ("POST", "/api/agent/feedback"),
     ("POST", "/api/agent/upload"),
     ("POST", "/api/media/image"),
+    ("POST", "/api/media/video"),
     ("PUT", "/api/admin/users/{user_id}/permissions"),
     ("PUT", "/api/admin/users/{user_id}/role"),
     # ===== 2026-11-15 本轮新增（R11：只登记、不重算 343 条冻结基线）=====
