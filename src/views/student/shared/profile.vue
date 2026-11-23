@@ -31,7 +31,15 @@
         </section>
 
         <StudyPlanCard variant="profile" />
-        <ProfileRadar />
+
+        <!-- 能力画像已合并到「学习计划」（与排课/计划同一份 capability 数据，避免两套口径） -->
+        <div class="card radar-entry">
+          <div class="radar-entry__text">
+            <p class="radar-entry__title">🎯 能力画像</p>
+            <p class="radar-entry__sub">六维能力与近 30 天分科正确率，已并入学习计划页</p>
+          </div>
+          <button class="btn-mini" @click="go('/study-plan')">查看 →</button>
+        </div>
 
       </aside>
 
@@ -311,7 +319,6 @@ import NavBar from '$vtj/vue/navbar.vue';
 // 最近做题记录：三端共用的单一真源组件，保证排序/条数/空态完全一致
 import RecentPracticeRecords from '@/components/domain/RecentPracticeRecords.vue';
 import StudyPlanCard from '@/components/plan/StudyPlanCard.vue';
-import ProfileRadar from '@/components/profile/ProfileRadar.vue';
 import WeeklyReportCard from '@/components/growth/WeeklyReportCard.vue';
 import PlanDiffPanel from '@/components/plan/PlanDiffPanel.vue';
 import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist.vue';
@@ -671,6 +678,9 @@ function handleLogout() {
 .coin-actions { display: flex; gap: 8px; }
 
 .btn-mini { padding: 7px 16px; background: linear-gradient(135deg, #1a2b5f, #1e3470); color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.radar-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.radar-entry__title { margin: 0; font-size: 14px; font-weight: 700; color: #1a2b5f; }
+.radar-entry__sub { margin: 4px 0 0; font-size: 11.5px; color: #8a8faa; }
 .btn-mini.full { width: 100%; }
 .btn-mini.ghost { background: #f0f2f5; color: #555; }
 .btn-mini.danger-outline { background: transparent; color: #c41e3a; border: 1px solid #c41e3a; margin-top: 16px; width: 100%; }

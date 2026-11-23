@@ -3,7 +3,7 @@
     <header class="radar__head">
       <div>
         <p class="radar__title">能力画像</p>
-        <p class="radar__sub">{{ state.hasProfile ? '六维自评 · 随画像更新' : '答完画像才有雷达图' }}</p>
+        <p class="radar__sub">{{ radarSub }}</p>
       </div>
       <span class="radar__score">{{ avgScore }}</span>
     </header>
@@ -35,6 +35,15 @@
         <span v-if="d.value < 40" class="radar__flag">待补</span>
       </li>
     </ul>
+
+    <!-- 近 30 天分科正确率：说明雷达分从哪来，也方便看"哪科在退步" -->
+    <ul v-if="breakdownRows.length" class="radar__breakdown">
+      <li v-for="row in breakdownRows" :key="row.subject_id">
+        <span class="radar__bd-name">{{ row.subject }}</span>
+        <span class="radar__bd-val" :class="{ weak: row.accuracy < 60 }">{{ row.accuracy }}%</span>
+        <span class="radar__bd-meta">{{ row.attempts }} 题 / 近 30 天</span>
+      </li>
+    </ul>
   </section>
 </template>
 
@@ -50,11 +59,24 @@ const state = reactive({
   hasProfile: false,
   profile: null,
   planPercent: 0,
+  // P1：优先用 /api/plan/current 的 capability（与学习计划同源），旧后端则本地算
+  capabilityDims: [],
+  capabilityAvg: null,
+  capabilityUpdatedAt: '',
+  breakdown: [],
 })
 
 const clamp = (n) => Math.max(6, Math.min(100, Math.round(n)))
 
 const dims = computed(() => {
+  if (Array.isArray(state.capabilityDims) && state.capabilityDims.length) {
+    return state.capabilityDims.map((d) => ({
+      label: d.label || d.key,
+      value: clamp(Number(d.value) || 0),
+      available: d.available !== false,
+      source: d.source || '',
+    }))
+  }
   const p = state.profile || {}
   const levelMap = { '零基础': 15, '了解一点': 35, '有基础': 60, '比较稳': 80, '冲刺提分': 90 }
   const level = levelMap[p.self_level] ?? 30
@@ -76,8 +98,21 @@ const dims = computed(() => {
 })
 
 const avgScore = computed(() => {
+  if (Number.isFinite(state.capabilityAvg)) return Math.round(state.capabilityAvg)
   const v = dims.value.map((d) => d.value)
   return Math.round(v.reduce((s, x) => s + x, 0) / v.length)
+})
+
+/** 近 30 天分科正确率（capability.breakdown，后端只读 practice_record 聚合） */
+const breakdownRows = computed(() => (Array.isArray(state.breakdown) ? state.breakdown : []))
+
+/** 副标题：优先说明"与学习计划同源 + 更新时间"，旧后端回退原话术 */
+const radarSub = computed(() => {
+  if (state.capabilityDims.length) {
+    const stamp = String(state.capabilityUpdatedAt || '').replace('T', ' ').slice(0, 16)
+    return stamp ? `实时能力画像 · 与学习计划同源 · ${stamp}` : '实时能力画像 · 与学习计划同源'
+  }
+  return state.hasProfile ? '六维自评 · 随画像更新' : '答完画像才有雷达图'
 })
 
 function angleOf(i, total) {
@@ -149,6 +184,14 @@ onMounted(async () => {
     }
     const pld = await pl.json()
     state.planPercent = pld?.progress?.percent || 0
+    // P1：优先消费后端 capability（与学习计划页同一份数据，避免两套口径）
+    const cap = pld?.capability
+    if (cap && Array.isArray(cap.dims) && cap.dims.length) {
+      state.capabilityDims = cap.dims
+      state.capabilityAvg = Number(cap.avg)
+      state.capabilityUpdatedAt = cap.updated_at || ''
+      state.breakdown = Array.isArray(cap.breakdown) ? cap.breakdown : []
+    }
   } catch (e) { /* 静默降级 */ }
 })
 </script>
@@ -176,6 +219,13 @@ onMounted(async () => {
 .radar__val { font-weight: 700; color: #374151; }
 .radar__list li.low .radar__val { color: #c41e3a; }
 .radar__flag { font-size: 10px; color: #c41e3a; background: rgba(196, 30, 58, 0.08); padding: 1px 6px; border-radius: 999px; }
+
+.radar__breakdown { list-style: none; margin: 10px 0 0; padding: 8px 0 0; border-top: 1px dashed #e5eaf5; }
+.radar__breakdown li { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #4b5563; padding: 2px 0; }
+.radar__bd-name { flex: 1; }
+.radar__bd-val { font-weight: 700; color: #059669; }
+.radar__bd-val.weak { color: #c41e3a; }
+.radar__bd-meta { color: #9ca3af; font-size: 10.5px; }
 
 @media (prefers-reduced-motion: reduce) {
   .radar__poly { animation: none; }
