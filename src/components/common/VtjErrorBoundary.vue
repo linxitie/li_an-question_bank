@@ -20,7 +20,13 @@
       <div class="vtj-error-icon">⚠️</div>
       <div class="vtj-error-title">模块加载失败</div>
       <div class="vtj-error-desc">{{ errorMessage }}</div>
-      <button class="vtj-error-retry" @click="handleRetry">刷新页面</button>
+      <!-- 2026-11-23：报错时把当前路由与两条自恢复动作都亮出来，避免用户只知道"刷新" -->
+      <div class="vtj-error-route">当前页面：{{ currentRoute }}</div>
+      <div class="vtj-error-actions">
+        <button class="vtj-error-retry" @click="handleRetry">刷新页面</button>
+        <button class="vtj-error-retry ghost" @click="handleHardReset">清除缓存并刷新</button>
+      </div>
+      <div class="vtj-error-hint">若反复出现，按 Ctrl+Shift+R 硬刷新，或把上面整行报错发给管理员。</div>
     </div>
   </div>
 </template>
@@ -41,6 +47,9 @@ export default defineComponent({
   setup(props) {
     const hasError = ref(false);
     const errorMessage = ref('组件渲染异常');
+    const currentRoute = ref(
+      typeof window !== 'undefined' ? window.location.hash || window.location.pathname : ''
+    );
 
     onErrorCaptured((err: any, instance, info) => {
       // 页面模块没加载下来时先自动重载一次（有次数保护），仍失败再展示兜底页
@@ -73,7 +82,24 @@ export default defineComponent({
       window.location.reload();
     }
 
-    return { hasError, errorMessage, handleRetry };
+    /** 清缓存 + 注销 Service Worker 后再刷新（解决"改了代码页面还是老报错"的缓存问题） */
+    async function handleHardReset() {
+      try {
+        if (typeof caches !== 'undefined') {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        }
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        }
+      } catch (e) {
+        // 清缓存失败也要继续刷新
+      }
+      window.location.reload();
+    }
+
+    return { hasError, errorMessage, currentRoute, handleRetry, handleHardReset };
   }
 });
 </script>
@@ -124,4 +150,14 @@ export default defineComponent({
 .vtj-error-retry:hover {
   background: #c41e3a;
 }
+.vtj-error-route {
+  font-size: 12px;
+  color: #8a8faa;
+  margin: -8px 0 14px;
+  word-break: break-all;
+}
+.vtj-error-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.vtj-error-retry.ghost { background: #fff; color: #1a2b5f; border: 1px solid #c9d2e6; }
+.vtj-error-retry.ghost:hover { background: #eef2fb; color: #1a2b5f; }
+.vtj-error-hint { margin-top: 14px; font-size: 12px; color: #a3a8bd; text-align: center; }
 </style>
