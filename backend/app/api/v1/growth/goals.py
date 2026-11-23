@@ -26,7 +26,8 @@ def compute_progress(goal: StudyGoal) -> float:
     """计算目标完成进度百分比"""
     if goal.target_count > 0:
         return round(goal.current_count / goal.target_count * 100, 1)
-    return 0.0
+    # 2026-11-23：target_count 缺失/为 0 时，勾选完成应显示 100%，而不是 0%（避免"已完成 0%"）
+    return 100.0 if goal.is_completed else 0.0
 
 
 def _snapshot_baseline(user_id: int, db: Session) -> tuple:

@@ -138,6 +138,11 @@ def sync_goal_progress(user_id: int, db: Session) -> List[int]:
             StudyGoal.user_id == user_id,
             StudyGoal.status == 1,
             StudyGoal.is_completed == 0,
+            # 2026-11-23 修复：AI 学习计划生成的任务（plan_id 非空）是"语义任务"
+            # （如"[睡前] 错题复盘 / 申论大作文 1 篇"），只能由用户勾选完成，
+            # 不能拿当天刷题量去顶。此前 CUSTOM 与 DAILY 同口径 + target_count=1，
+            # 导致"随便做 1 道题"就把计划任务判成 100% 并自动发金币。
+            StudyGoal.plan_id.is_(None),
         )
         .all()
     )

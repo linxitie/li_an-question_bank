@@ -1043,6 +1043,10 @@ async def toggle_task(
     if goal.is_completed == 1:
         goal.completed_time = datetime.now()
         goal.current_count = 1
+        # 2026-11-23：计划任务按"做完/没做完"计，target_count 必须是 1，
+        # 否则历史脏数据（target_count=0）会出现"已完成但进度 0%"的矛盾显示。
+        if not goal.target_count or goal.target_count <= 0:
+            goal.target_count = 1
     else:
         goal.completed_time = None
         goal.current_count = 0
