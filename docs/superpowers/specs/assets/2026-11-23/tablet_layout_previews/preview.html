@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#e9edf5;font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:#1a2b5f}
+  .artboard{background:#f5f7fb;margin:0;position:relative}
+  .label{height:34px;background:#1a2b5f;color:#fff;font-size:13px;display:flex;align-items:center;padding:0 14px;letter-spacing:.3px}
+  .app{width:100%;min-height:866px}
+  .nav{height:58px;background:#1a2b5f;display:flex;align-items:center;padding:0 20px;color:#fff;gap:16px}
+  .logo{font-weight:800;font-size:18px;display:flex;align-items:center;gap:8px}
+  .logo i{width:28px;height:28px;border-radius:8px;background:#c41e3a;display:inline-block;position:relative}
+  .logo i:after{content:"";position:absolute;inset:7px;border:2px solid #fff;border-radius:3px}
+  .menu{display:flex;gap:22px;font-size:13px;opacity:.9;margin-left:16px}
+  .menu b{color:#fff;border-bottom:2px solid #c41e3a;padding:18px 2px 16px;font-weight:600}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:12px;font-size:13px}
+  .bell{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font-size:15px}
+  .avatar{width:30px;height:30px;border-radius:50%;background:#b9c7ea;display:flex;align-items:center;justify-content:center;font-size:13px}
+  .layout{display:grid;gap:14px;padding:14px}
+  .layout.three{grid-template-columns:236px minmax(0,1fr) 236px;grid-template-areas:"tasks center stats"}
+  .layout.two{grid-template-columns:236px minmax(0,1fr);grid-template-areas:"tasks center" "tasks stats"}
+  .tasks{grid-area:tasks;display:flex;flex-direction:column;gap:10px;min-height:760px}
+  .center{grid-area:center;display:flex;flex-direction:column;gap:12px;min-width:0}
+  .stats{grid-area:stats;display:flex;flex-direction:column;gap:10px}
+  .card{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(26,43,95,.06);padding:14px}
+  .card-title{font-size:15px;font-weight:800;display:flex;align-items:center;gap:6px;margin-bottom:10px}
+  .task-tabs{display:flex;gap:4px;margin-bottom:8px}
+  .task-tab{font-size:11px;padding:3px 8px;border-radius:999px;background:#f1f4fa;color:#5a6488}
+  .task-tab.on{background:#c41e3a;color:#fff}
+  .task{border:1px solid #eef2f8;border-radius:10px;padding:9px 10px;margin-bottom:8px}
+  .task .tt{font-size:12px;font-weight:700;line-height:1.5;margin-bottom:6px}
+  .task .bar{height:7px;border-radius:999px;background:#eef2f8;overflow:hidden}
+  .task .bar i{display:block;height:100%;width:28%;background:linear-gradient(90deg,#1a2b5f,#3f5da8);border-radius:999px}
+  .task .meta{display:flex;justify-content:space-between;font-size:10px;color:#8a93a8;margin-top:5px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .action{height:46px;padding:0 13px;border-radius:12px;background:#fff;display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(26,43,95,.05)}
+  .action.on{background:#1a2b5f;color:#fff}
+  .action .tag{font-size:9px;padding:1px 5px;border-radius:5px;background:#c41e3a;color:#fff}
+  .tools{display:flex;gap:8px;flex-wrap:wrap}
+  .tool{height:34px;padding:0 11px;border-radius:9px;border:1px solid #e7ecf5;background:#fff;display:flex;align-items:center;gap:6px;font-size:12px;color:#33415c}
+  .tabs{display:flex;background:#fff;border-radius:12px;padding:4px;box-shadow:0 2px 8px rgba(26,43,95,.05)}
+  .tab{flex:1;text-align:center;padding:9px 0;border-radius:9px;font-size:13px;font-weight:700;color:#5a6488}
+  .tab.on{background:#1a2b5f;color:#fff}
+  .cats-title{font-size:15px;font-weight:800;margin:2px 0 8px}
+  .cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .cat{background:#fff;border-radius:12px;padding:11px 10px;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(26,43,95,.05);min-width:0}
+  .ico{width:30px;height:30px;border-radius:9px;background:#eef3ff;display:flex;align-items:center;justify-content:center;font-size:14px;flex:0 0 auto}
+  .cat .nm{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cat .no{font-size:10px;color:#8a93a8}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{background:#f8f9fc;border-radius:9px;padding:9px 6px;text-align:center}
+  .stat b{display:block;font-size:18px;color:#1a2b5f}
+  .stat span{font-size:10px;color:#8a93a8}
+  .acc{display:flex;justify-content:space-between;background:#f8f9fc;border-radius:9px;padding:9px 10px;font-size:11px;color:#5a6488;margin-top:8px}
+  .chart{margin-top:9px;height:100px;border-radius:9px;background:linear-gradient(180deg,#f8fbff,#fff);position:relative;overflow:hidden;border:1px solid #eef2f8}
+  .chart:before{content:"";position:absolute;left:10px;right:10px;bottom:18px;height:52px;background:repeating-linear-gradient(90deg,#2f4d92 0 6px,transparent 6px 15px);opacity:.85}
+  .chart:after{content:"";position:absolute;left:8px;right:8px;top:42px;height:2px;background:#c41e3a;transform:rotate(-6deg);opacity:.8}
+  .tiny{font-size:10px;color:#8a93a8;line-height:1.5}
+  .notice{margin-top:8px;border:1px dashed #d7deea;border-radius:9px;padding:8px;font-size:10px;color:#8a93a8;line-height:1.5}
+  #b .layout{padding:12px}
+  #c .layout{padding:10px}
+  #c .layout.three{grid-template-columns:190px minmax(0,1fr) 190px;gap:9px}
+  #c .action{padding:0 8px;font-size:11px;height:42px}
+  #c .tool{padding:0 7px;font-size:10px;height:31px}
+  #c .card{padding:10px;border-radius:11px}
+  #c .cats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #c .cat{padding:8px 7px}
+  #c .cat .nm{font-size:11px}
+  #c .stat-grid{grid-template-columns:1fr}
+</style>
+</head>
+<body>
+
+<section class="artboard" id="a" style="width:1024px">
+  <div class="label">方案 A · ≥1000px 三列（示例 1024 宽）· 任务 236 / 中栏自适应 / 统计 236</div>
+  <div class="app">
+    <div class="nav"><div class="logo"><i></i>警大砺安</div><div class="menu"><span>首页</span><b>题库</b><span>商城</span><span>论坛</span><span>关于砺安题库</span></div><div class="nav-right"><div class="bell">🔔</div><div class="avatar">学</div><span>202516001</span></div></div>
+    <div class="layout three">
+      <aside class="tasks">
+        <div class="card" style="flex:1">
+          <div class="card-title">📌 任务列表</div>
+          <div class="task-tabs"><span class="task-tab on">自定义任务</span><span class="task-tab">周任务</span><span class="task-tab">日常任务</span></div>
+          <div class="task"><div class="tt">每日做题 100 道</div><div class="bar"><i></i></div><div class="meta"><span>完成 28/100</span><span>进行中</span></div></div>
+          <div class="task"><div class="tt">【晚上】申论-归纳概括 1 道真题</div><div class="bar"><i style="width:0"></i></div><div class="meta"><span>完成 0/1</span><span>未开始</span></div></div>
+          <div class="task"><div class="tt">本周完成 150 道题</div><div class="bar"><i style="width:64%"></i></div><div class="meta"><span>96/150</span><span>进行中</span></div></div>
+          <div class="notice">任务卡片沿用现有 padding / 圆角 / 字号，不随布局缩小。</div>
+        </div>
+      </aside>
+      <main class="center">
+        <div class="actions"><div class="action on">⚡ 快速练习 <span class="tag">NEW</span></div><div class="action">📋 历年试卷</div><div class="action">🤖 智能组卷</div><div class="action">📅 学习计划</div><div class="action">🧠 联考小智 <span class="tag">AI</span></div><div class="action">📕 错题本</div></div>
+        <div class="tools"><div class="tool">⏱ 小模考</div><div class="tool">🖥 院校联考机考系统</div><div class="tool">📝 笔记</div><div class="tool">⭐ 收藏</div><div class="tool">📊 成绩分析</div><div class="tool" style="margin-left:auto">🔍 搜索</div></div>
+        <div class="tabs"><div class="tab on">行测</div><div class="tab">申论</div><div class="tab">公专</div><div class="tab">自定义刷题</div></div>
+        <div><div class="cats-title">题目分类</div><div class="cats">
+          <div class="cat"><div class="ico">🏛</div><div><div class="nm">政治理论</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">💡</div><div><div class="nm">常识判断</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">💬</div><div><div class="nm">言语理解与表达</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">123</div><div><div class="nm">数量关系</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">🔎</div><div><div class="nm">判断推理</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">📈</div><div><div class="nm">资料分析</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">⏱</div><div><div class="nm">知觉速度与准确性</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">⚗</div><div><div class="nm">科学推理</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">📁</div><div><div class="nm">未分类</div><div class="no">34/110</div></div></div>
+        </div></div>
+      </main>
+      <aside class="stats">
+        <div class="card" style="flex:1">
+          <div class="card-title">📊 练习记录</div>
+          <div class="stat-grid"><div class="stat"><b>0</b><span>今日(题)</span></div><div class="stat"><b>0</b><span>本周(题)</span></div><div class="stat"><b>150</b><span>累计(题)</span></div><div class="stat"><b>20%</b><span>正确率</span></div></div>
+          <div class="acc"><span>做题用时(今日)</span><b>0 分钟</b></div>
+          <div class="chart"></div>
+          <div class="tiny" style="margin-top:8px">柱=完成率 · 折线=正确率 · 点柱子开始练习</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section class="artboard" id="b" style="width:834px;margin-top:28px">
+  <div class="label">方案 B · 768–999px 两列（示例 834 宽）· 任务 236 + 中栏；统计下移</div>
+  <div class="app">
+    <div class="nav"><div class="logo"><i></i>警大砺安</div><div class="menu"><span>首页</span><b>题库</b><span>商城</span><span>论坛</span></div><div class="nav-right"><div class="bell">🔔</div><div class="avatar">学</div><span>202516001</span></div></div>
+    <div class="layout two">
+      <aside class="tasks">
+        <div class="card" style="flex:1">
+          <div class="card-title">📌 任务列表</div>
+          <div class="task-tabs"><span class="task-tab on">自定义任务</span><span class="task-tab">周任务</span><span class="task-tab">日常任务</span></div>
+          <div class="task"><div class="tt">每日做题 100 道</div><div class="bar"><i></i></div><div class="meta"><span>完成 28/100</span><span>进行中</span></div></div>
+          <div class="task"><div class="tt">【晚上】申论-归纳概括 1 道真题</div><div class="bar"><i style="width:0"></i></div><div class="meta"><span>完成 0/1</span><span>未开始</span></div></div>
+          <div class="task"><div class="tt">本周完成 150 道题</div><div class="bar"><i style="width:64%"></i></div><div class="meta"><span>96/150</span><span>进行中</span></div></div>
+          <div class="notice">两列时任务列表保持 236px，保证任务标题不折行过多。</div>
+        </div>
+      </aside>
+      <main class="center">
+        <div class="actions"><div class="action on">⚡ 快速练习 <span class="tag">NEW</span></div><div class="action">📋 历年试卷</div><div class="action">🤖 智能组卷</div><div class="action">📅 学习计划</div><div class="action">🧠 联考小智 <span class="tag">AI</span></div><div class="action">📕 错题本</div></div>
+        <div class="tools"><div class="tool">⏱ 小模考</div><div class="tool">🖥 院校联考机考系统</div><div class="tool">📝 笔记</div><div class="tool">⭐ 收藏</div><div class="tool">📊 成绩分析</div></div>
+        <div class="tabs"><div class="tab on">行测</div><div class="tab">申论</div><div class="tab">公专</div><div class="tab">自定义刷题</div></div>
+        <div><div class="cats-title">题目分类</div><div class="cats" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+          <div class="cat"><div class="ico">🏛</div><div><div class="nm">政治理论</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">💡</div><div><div class="nm">常识判断</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">💬</div><div><div class="nm">言语理解与表达</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">123</div><div><div class="nm">数量关系</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">🔎</div><div><div class="nm">判断推理</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">📈</div><div><div class="nm">资料分析</div><div class="no">0/0</div></div></div>
+        </div></div>
+        <div class="card">
+          <div class="card-title">📊 练习记录</div>
+          <div class="stat-grid"><div class="stat"><b>0</b><span>今日(题)</span></div><div class="stat"><b>0</b><span>本周(题)</span></div><div class="stat"><b>150</b><span>累计(题)</span></div><div class="stat"><b>20%</b><span>正确率</span></div></div>
+          <div class="chart" style="height:70px"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+</section>
+
+<section class="artboard" id="c" style="width:768px;margin-top:28px">
+  <div class="label">方案 C · 768px 也三列 · 任务 190 / 中栏自适应 / 统计 190（空间最紧）</div>
+  <div class="app">
+    <div class="nav"><div class="logo"><i></i>警大砺安</div><div class="menu"><span>首页</span><b>题库</b><span>商城</span></div><div class="nav-right"><div class="bell">🔔</div></div></div>
+    <div class="layout three">
+      <aside class="tasks">
+        <div class="card" style="flex:1">
+          <div class="card-title">📌 任务列表</div>
+          <div class="task-tabs"><span class="task-tab on">自定义</span><span class="task-tab">周任务</span></div>
+          <div class="task"><div class="tt">每日做题 100 道</div><div class="bar"><i></i></div><div class="meta"><span>28/100</span><span>进行中</span></div></div>
+          <div class="task"><div class="tt">【晚上】申论-归纳概括 1 道真题</div><div class="bar"><i style="width:0"></i></div><div class="meta"><span>0/1</span><span>未开始</span></div></div>
+          <div class="notice">三列在 768 宽时，任务标题/工具行更容易折行。</div>
+        </div>
+      </aside>
+      <main class="center">
+        <div class="actions"><div class="action on">⚡ 快速练习</div><div class="action">📋 历年试卷</div><div class="action">🤖 智能组卷</div><div class="action">📅 学习计划</div><div class="action">🧠 联考小智</div><div class="action">📕 错题本</div></div>
+        <div class="tools"><div class="tool">⏱ 小模考</div><div class="tool">🖥 院校机考</div><div class="tool">📝 笔记</div><div class="tool">⭐ 收藏</div><div class="tool">📊 成绩</div></div>
+        <div class="tabs"><div class="tab on">行测</div><div class="tab">申论</div><div class="tab">公专</div><div class="tab">自定义</div></div>
+        <div><div class="cats-title">题目分类</div><div class="cats">
+          <div class="cat"><div class="ico">🏛</div><div><div class="nm">政治理论</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">💡</div><div><div class="nm">常识判断</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">💬</div><div><div class="nm">言语理解</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">123</div><div><div class="nm">数量关系</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">🔎</div><div><div class="nm">判断推理</div><div class="no">0/0</div></div></div>
+          <div class="cat"><div class="ico">📈</div><div><div class="nm">资料分析</div><div class="no">0/0</div></div></div>
+        </div></div>
+      </main>
+      <aside class="stats">
+        <div class="card" style="flex:1">
+          <div class="card-title">📊 练习记录</div>
+          <div class="stat-grid"><div class="stat"><b>0</b><span>今日</span></div><div class="stat"><b>0</b><span>本周</span></div><div class="stat"><b>150</b><span>累计</span></div><div class="stat"><b>20%</b><span>正确率</span></div></div>
+          <div class="chart" style="height:90px"></div>
+          <div class="tiny" style="margin-top:6px">统计卡片保留原 padding 时高度会明显变长。</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
