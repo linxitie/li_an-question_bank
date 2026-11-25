@@ -78,7 +78,7 @@
           📊 计划总览
         </div>
         <div class="view-tab" @click="scrollToToday">
-          📌 今日任务
+          📌 今日排课
         </div>
       </div>
 
@@ -288,7 +288,7 @@
 
 <script lang="ts">
   // @ts-nocheck
-  import { defineComponent, reactive, onMounted, computed } from 'vue';
+  import { defineComponent, reactive, onMounted, computed, nextTick } from 'vue';
   import ProfileQuizInline from '@/components/plan/ProfileQuizInline.vue';
   import ProfileRadar from '@/components/profile/ProfileRadar.vue';
   import NavBar from './navbar.vue';
@@ -716,8 +716,18 @@
       }
 
       function askAI() {
-        state.showAsk = !state.showAsk;
+        // 2026-11-23：原来只 toggle，输入框在页面底部且不滚动/不聚焦，用户以为按钮没反应
+        const willOpen = !state.showAsk;
+        state.showAsk = willOpen;
+        if (!willOpen) return;
         state.askReply = '';
+        nextTick(() => {
+          const box = document.querySelector('.ask-box');
+          if (!box) return;
+          box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          const input = box.querySelector('input');
+          if (input && input.focus) input.focus();
+        });
       }
 
       /** ① 排课项勾选：调任务 toggle（后端会重算排课），再刷新今日面板与计划 */
@@ -828,8 +838,9 @@
       }
 
       function scrollToToday() {
-        const el = document.querySelector('.section');
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
+        // 2026-11-23：原锚点 .section（今日任务卡）已按需求删除，改为滚动到"智能排课"卡
+        const el = document.querySelector('.smart-schedule-card') || document.querySelector('.plan-radar');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
 
       onMounted(async () => {

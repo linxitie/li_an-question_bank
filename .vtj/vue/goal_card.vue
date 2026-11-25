@@ -32,7 +32,8 @@
       <template v-if="state.activeTab === 'custom'">
       <div v-for="goal in state.goals" :key="goal.goal_id" class="goal-item-card">
         <div class="goal-card-top">
-          <span :class="['goal-type-badge', goal.goal_type.toLowerCase()]">
+          <!-- 2026-11-23：goal_type 历史数据可能为 null，直接 toLowerCase() 会整页白屏 -->
+          <span :class="['goal-type-badge', (goal.goal_type || 'custom').toLowerCase()]">
             {{ getGoalTypeLabel(goal.goal_type) }}
           </span>
           <span v-if="getGoalStatus(goal) === 'completed'" class="status-badge completed">已完成</span>
@@ -53,8 +54,15 @@
         </div>
 
         <div v-if="goal.deadline" class="goal-deadline">
-          <span class="deadline-label">完成时间</span>
-          <span class="deadline-countdown">{{ getDeadlineCountdown(goal.deadline).text }}</span>
+          <!-- 2026-11-23 修复：原来把"距截止还剩多久"标成"完成时间"，已完成的又不显示真实完成时间 -->
+          <template v-if="goal.is_completed && goal.completed_time">
+            <span class="deadline-label">完成时间</span>
+            <span class="deadline-countdown">{{ formatDeadline(goal.completed_time) }}</span>
+          </template>
+          <template v-else>
+            <span class="deadline-label">剩余时间</span>
+            <span class="deadline-countdown">{{ getDeadlineCountdown(goal.deadline).text }}</span>
+          </template>
           <span class="deadline-sep">-- 结束时间</span>
           <span class="deadline-date">{{ formatDeadline(goal.deadline) }}</span>
         </div>

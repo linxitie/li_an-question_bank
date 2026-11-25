@@ -528,9 +528,10 @@ export default defineComponent({
       
       if (searchQuery.value) {
         const query = searchQuery.value.toLowerCase();
-        result = result.filter(q => 
-          q.title.toLowerCase().includes(query) ||
-          q.tags.some(tag => tag.toLowerCase().includes(query))
+        // 2026-11-23：接口历史数据可能出现 title/tags 为 null，直接 toLowerCase 会整页白屏
+        result = result.filter(q =>
+          String(q.title || '').toLowerCase().includes(query) ||
+          (Array.isArray(q.tags) ? q.tags : []).some(tag => String(tag || '').toLowerCase().includes(query))
         );
       }
       

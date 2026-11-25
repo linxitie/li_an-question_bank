@@ -1,4 +1,4 @@
-﻿# docs/ 文档索引
+# docs/ 文档索引
 
 > 本索引由 `solve_problems_files/README.md` 迁移而来（目录分层重构）。
 > 归档规则：展示方案的同时落盘；定稿当场归档；归档即更新本索引。
@@ -17,6 +17,8 @@
 
 | 文档 | 版本 | 状态 | 说明 |
 |---|---|---|---|
+| `ops/大模型密钥本机配置说明_v1.md` | v1 | ✅ 本机已配置（2026-11-23） | 密钥只放 `backend/.env`（`.gitignore:142` 已忽略，不入库）；不记录密钥值；含 `/health` 自检、`llm_client.chat` 调用注意事项（入参是消息数组，传字符串会被上游判 422）、轮换流程与本机实测结论（chat / chat_plan / plan.generate / plan.adjust / undo 全通） |
+| `superpowers/specs/学习计划任务误判完成_排查与修复_v1.md` | v1 | ✅ 已修复（2026-11-23） | 秉瑞反馈「AI 计划任务没做却显示 100%」：根因 = `goal_progress.sync_goal_progress` 把 CUSTOM 当 DAILY 按当天刷题量算，而 AI 计划任务 `target_count=1` → 做 1 道题即判完成并发金币；修复 = 计划任务（`plan_id` 非空）只由勾选完成；另修 `target_count<=0` 时进度显示、`goal_card` 把"剩余时间"误标"完成时间"；附历史数据回退脚本 `scripts/fix_plan_task_false_completion.py`（dry-run 默认）与 4 例回归测试 |
 | `design/学习计划页_模板补丁_v2.md` | v2 | ✅ 已执行（2026-11-22，用户授权改模板；含执行记录与截图） | v1 的完整版：①排课渲染（含 `toggleScheduleItem`/`schedulePercent`）③删重复区块行号④雷达组件嵌入⑤AI 调整"已调整 N 项 + 撤销 + 最近调整"模板与脚本⑥面试作答框+多轮追问+语音（SpeechRecognition）⑦小智域边界提示；附三端/四角色验收与后端契约表 |
 | `design/学习计划页_模板改造清单_v1.md` | v1 | 📋 待设计器执行（2026-11-22） | R3 禁 AI 改 `.vtj` 模板的交接单：①`study_plan.vue:143-200` 静态排课块 → 渲染 `schedule.slots`（含 `toggleScheduleItem`/`schedulePercent` 脚本片段）③删重复「本周打卡/今日任务/连续打卡」行号清单④`:261-290` 静态雷达 → `<ProfileRadar />`（我的页已改为一行入口）⑥小智面试作答框（P3）；附三端验收步骤 |
 | `superpowers/specs/学习计划与联考小智_功能改造方案_v1.md` | v1 | 🚧 实施中（P0/P1 已落地，P2–P4 待做；2026-11-22，基线 main@36baca6） | 按用户 7 条意见：①智能排课数据化（`plan_meta.schedule` + 动态重算 + `/plan/current.schedule`）②LLM Key 统一 `backend/.env` + `.env.example` + `/health.llm_configured`③删学习计划页重复「本周打卡/今日任务」（待模板）④能力雷达同源（组件已消费 `capability`，嵌入待模板）⑤AI 调整计划待改成受限 diff 落地⑥模拟面试待多轮+语音⑦知识库三道闸；附三端/三角色检查清单与分期 |
