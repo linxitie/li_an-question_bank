@@ -7,6 +7,7 @@
 import { onBeforeUnmount, onMounted } from 'vue';
 import { applyQuestionBankLayout } from '@/utils/questionBankLayoutPatch';
 import { applyTabletQuestionBankPatch } from '@/utils/tabletQuestionBankPatch';
+import { applyMobileHomeLayout } from '@/utils/mobileHomeLayoutPatch';
 
 type AuthWin = Window & {
   __VTJ_AUTH__?: {
@@ -110,6 +111,7 @@ function scan(): void {
   if (!isStudentArea()) return;
   applyQuestionBankLayout();
   applyTabletQuestionBankPatch();
+  applyMobileHomeLayout();
   // 注销下载客户端入口（需求 4；页面路由同步删除）
   document.querySelectorAll('.btn-download').forEach((el) => el.remove());
 
